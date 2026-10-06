@@ -10,8 +10,13 @@ Twitch VODs, Reddit, X, news sites, direct `.mp4` / HLS links and
 ## Features
 
 - Classic Windows 98 look (via [98.css](https://github.com/jdan/98.css)), custom title bar, menus, dialogs
-- Download queue (one at a time) with progress, speed and ETA
-- Cancel running or queued downloads; partial files are cleaned up
+- Download queue (one at a time) with progress bar, percent, total size, speed and ETA
+  (the ETA uses the rate over the most recent half of the download, so it doesn't jump around)
+- Closing the app pauses unfinished downloads and keeps their partial files; on the next start
+  they come back as **Paused**. Select one and press **Resume**, or use **File → Resume All**,
+  to continue where it stopped
+- Cancel running, queued or paused downloads; the partial `.part` files are removed (some
+  intermediate pieces of merged video+audio downloads can still be left behind, a known gap)
 - Format presets: Best, 1080p, 720p, 480p (MP4), audio-only MP3 / M4A
 - Original synthesized retro sound cues (toggle with *Sounds*)
 - Remembers download folder, format and sound setting

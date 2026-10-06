@@ -36,6 +36,7 @@
         <ul class="menu-list" id="menu-file">
           <li data-action="open-folder">Open Download Folder</li>
           <li data-action="browse">Change Folder...</li>
+          <li data-action="resume-all">Resume All</li>
           <li class="sep"></li>
           <li data-action="exit"><span>E<u>x</u>it</span></li>
         </ul>
@@ -81,6 +82,8 @@
               <th class="col-title">Title</th>
               <th class="col-status">Status</th>
               <th class="col-progress">Progress</th>
+              <th class="col-pct">%</th>
+              <th class="col-size">Size</th>
               <th class="col-speed">Speed</th>
               <th class="col-eta">ETA</th>
             </tr>
@@ -91,6 +94,7 @@
       </div>
 
       <div class="actions">
+        <button id="resume" disabled>Resume</button>
         <button id="cancel" disabled>Cancel</button>
         <button id="remove" disabled>Remove</button>
         <button id="open">Open Folder</button>

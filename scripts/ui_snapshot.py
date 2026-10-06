@@ -20,15 +20,16 @@ INDEX = Path(__file__).resolve().parents[1] / "src" / "vd98" / "web" / "index.ht
 
 MOCK_API = r"""
 const jobs = [
-  {id: 1, url: 'https://example.com/1', title: 'Short clip', status: 'done', percent: 100, speed: null, eta: null, error: ''},
-  {id: 2, url: 'https://example.com/2', title: 'A much longer video title that should be cut off with an ellipsis', status: 'downloading', percent: 43.5, speed: 3.6e6, eta: 84, error: ''},
-  {id: 3, url: 'https://example.com/3', title: '', status: 'queued', percent: 0, speed: null, eta: null, error: ''},
-  {id: 4, url: 'https://example.com/4', title: '', status: 'error', percent: 0, speed: null, eta: null, error: 'Unsupported URL'},
+  {id: 1, url: 'https://example.com/1', title: 'Short clip', status: 'done', percent: 100, speed: null, eta: null, total_bytes: 475990, size_estimated: false, error: ''},
+  {id: 2, url: 'https://example.com/2', title: 'A much longer video title that should be cut off with an ellipsis', status: 'downloading', percent: 43.5, speed: 3.6e6, eta: 84, total_bytes: 734003200, size_estimated: true, error: ''},
+  {id: 3, url: 'https://example.com/3', title: '', status: 'queued', percent: 0, speed: null, eta: null, total_bytes: null, size_estimated: false, error: ''},
+  {id: 4, url: 'https://example.com/4', title: '', status: 'error', percent: 0, speed: null, eta: null, total_bytes: null, size_estimated: false, error: 'Unsupported URL'},
+  {id: 5, url: 'https://example.com/5', title: 'Interrupted last time', status: 'paused', percent: 61.2, speed: null, eta: null, total_bytes: 52428800, size_estimated: false, error: ''},
 ];
 const settings = {download_dir: '/home/user/Downloads', preset: 'best', sound: false};
 const presets = [{key: 'best', label: 'Best quality (MP4)'}, {key: 'mp3', label: 'Audio only (MP3)'}];
 window.pywebview = {api: {
-  init: async () => ({jobs, settings, presets, ffmpeg: true}),
+  init: async () => ({jobs, settings, presets, ffmpeg: true, restored: 1}),
   get_state: async () => ({jobs, settings}),
   about: async () => ({app: '0.0.0', yt_dlp: 'mock'}),
   save_settings: async (p) => Object.assign(settings, p),
@@ -36,6 +37,7 @@ window.pywebview = {api: {
   clear_finished: async () => true, open_folder: async () => true, choose_folder: async () => null,
   minimize: async () => {}, maximize: async () => {}, close: async () => {},
   start_move: async () => true, start_resize: async () => true,
+  resume: async () => true, resume_all: async () => 1,
 }};
 """
 

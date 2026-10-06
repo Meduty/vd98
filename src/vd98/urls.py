@@ -22,9 +22,13 @@ def normalize_url(raw: str) -> str:
         raise InvalidURL("URL must not contain spaces.")
     if "://" not in url:
         url = "https://" + url
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+        hostname = parts.hostname  # may raise too (e.g. a malformed port)
+    except ValueError:  # e.g. "http://[": "Invalid IPv6 URL"
+        raise InvalidURL("URL could not be parsed.") from None
     if parts.scheme.lower() not in ("http", "https"):
         raise InvalidURL("Only http:// and https:// links are supported.")
-    if not parts.hostname:
+    if not hostname:
         raise InvalidURL("URL has no host name.")
     return url

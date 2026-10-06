@@ -19,15 +19,17 @@ Owns jobs, one worker thread, yt-dlp calls, cancel, partial cleanup. No GUI impo
 
 | Concern | File / symbol |
 |---|---|
-| Job record + public dict | `src/vd98/manager.py:23` `Job`, `Job.public` |
-| Queue, worker, state machine | `src/vd98/manager.py:66` `DownloadManager`, `_worker` :131, `_run` :145 |
-| Progress → percent/speed/eta | `src/vd98/manager.py:183` `_on_hook`; post-processing `_on_pp_hook` :210 |
-| Thread-safe state writes, terminal guard | `src/vd98/manager.py:214` `_update` |
-| Cancel + `.part` cleanup | `cancel` :91, `_cleanup_partials` :227 |
-| yt-dlp error → short message | `src/vd98/manager.py:60` `clean_error` |
+| Job record + public dict | `src/vd98/manager.py:26` `Job`, `Job.public` |
+| Queue, worker, state machine | `src/vd98/manager.py:88` `DownloadManager`, `_worker` :233, `_run` :257 |
+| Progress → percent/speed/eta | `src/vd98/manager.py:298` `_on_hook`; post-processing `_on_pp_hook` :342 |
+| Thread-safe state writes, terminal guard | `src/vd98/manager.py:334` `_update` |
+| Cancel + `.part` cleanup | `cancel` :124, `_cleanup_partials` :378 |
+| yt-dlp error → short message | `src/vd98/manager.py:82` `clean_error` |
 | URL validation | `src/vd98/urls.py:12` `normalize_url` |
 | Format presets → yt-dlp opts | `src/vd98/formats.py` `PRESETS`, `preset_opts`, `preset_list` |
 | Settings JSON | `src/vd98/settings.py` `load`, `save`, `config_path` |
+| Unfinished-jobs queue across restarts | `src/vd98/queue_store.py` `QueueStore`, `state_path`; manager `suspend`, `restore`, `resume`, `_persist` |
+| Smoothed ETA | `src/vd98/eta.py` `HalfWindowEta`; fed from `_on_hook` with the injected clock |
 
 ### 2. Bridge: `Api`
 
@@ -35,12 +37,12 @@ Plain-data methods JS can call. Holds manager, settings, window ref (underscored
 
 | Concern | File / symbol |
 |---|---|
-| Queue ops for JS | `src/vd98/api.py:35` `add`, `cancel` :44, `remove` :47, `clear_finished` :50 |
-| State snapshot for polling | `get_state` :54, `init` :57 |
-| Settings + folder picker | `save_settings` :65, `choose_folder` :73 |
-| Open folder in file manager (only subprocess call) | `open_folder` :83 |
-| Custom title-bar buttons | `minimize` :117, `maximize` :121, `close` :125 |
-| Version info | `about` :130 |
+| Queue ops for JS | `src/vd98/api.py:38` `add`, `cancel` :59, `remove` :63, `clear_finished` :74 |
+| State snapshot for polling | `get_state` :78, `init` :81 |
+| Settings + folder picker | `save_settings` :90, `choose_folder` :98 |
+| Open folder in file manager (only subprocess call) | `open_folder` :108 |
+| Custom title-bar buttons | `minimize` :142, `maximize` :146, `close` :160 |
+| Version info | `about` :166 |
 
 ### 3. Shell: window
 
@@ -55,9 +57,9 @@ Plain-data methods JS can call. Holds manager, settings, window ref (underscored
 | Concern | File / symbol |
 |---|---|
 | Markup: title bar, menus, form, queue table, status bar, modal | `index.html` |
-| Startup, wiring, polling | `app.js` `start` :317, `wire` :236, `setInterval(refresh, 500)` :339 |
-| Render queue rows | `app.js` `render` :78, `cell`, `progressCell` |
-| Status-change side effects (sounds, dialogs) | `app.js` `announce` :109 |
+| Startup, wiring, polling | `app.js` `start` :347, `wire` :261, `setInterval(refresh, 500)` :372 |
+| Render queue rows | `app.js` `render` :93, `cell`, `progressCell` |
+| Status-change side effects (sounds, dialogs) | `app.js` `announce` :129 |
 | Menus | `app.js` `wireMenus`; styles `app.css` `.menubar` |
 | Sounds (synthesized, no assets) | `sounds.js` `Sounds` |
 | Win98 widgets | `vendor/98.css` (vendored, frozen — SPEC C.11) |
@@ -90,18 +92,18 @@ Plain-data methods JS can call. Holds manager, settings, window ref (underscored
 
 ## End-to-end: user pastes URL, presses Download
 
-1. Enter/click → `addUrl` (`src/vd98/web/app.js:142`) trims input, calls `api.add(url, preset)` (:150).
-2. pywebview runs `Api.add` (`src/vd98/api.py:32`) on a bridge thread.
-3. `DownloadManager.add` (`src/vd98/manager.py:79`): `normalize_url` (`src/vd98/urls.py:12`), `preset_opts` check, dir check, create `Job` under lock, `queue.put`.
-4. `Api.add` saves preset if changed (`save_settings` :65) and returns job dict → JS sets `selectedId`, plays start sound.
-5. Worker `_worker` (`manager.py:131`) takes id, sets `downloading`, calls `_run` (:145).
-6. `_run` builds opts (preset + `paths`, `outtmpl`, `noplaylist=True` :150, hooks :155), calls `ydl.extract_info(url, download=True)` (:160).
-7. yt-dlp calls `_on_hook` (:183) per chunk → `_update` (:214) sets percent/speed/eta; ffmpeg step fires `_on_pp_hook` (:210) → `processing`.
-8. `_run` sets `done` + `filename` from `requested_downloads`; exceptions map to `cancelled` (with `_cleanup_partials` :227) or `error` (`clean_error` :60).
-9. Meanwhile JS `refresh` (`app.js:130`) polls `get_state` every 500 ms (:339) → `announce` (:109) plays done/error sound, opens error dialog → `render` (:78) rebuilds rows.
+1. Enter/click → `addUrl` (`src/vd98/web/app.js:162`) trims input, calls `api.add(url, preset)` (:170).
+2. pywebview runs `Api.add` (`src/vd98/api.py:38`) on a bridge thread.
+3. `DownloadManager.add` (`src/vd98/manager.py:110`): `normalize_url` (`src/vd98/urls.py:12`), `preset_opts` check, dir check, create `Job` under lock, `queue.put`, save the unfinished queue (`_persist`).
+4. `Api.add` saves preset if changed (`save_settings` :90) and returns job dict → JS sets `selectedId`, plays start sound.
+5. Worker `_worker` (`manager.py:233`) takes id, sets `downloading`, calls `_run` (:257).
+6. `_run` builds opts (preset + `paths`, `outtmpl`, `noplaylist=True` :262, hooks :267), calls `ydl.extract_info(url, download=True)` (:272).
+7. yt-dlp calls `_on_hook` (:298) per chunk → feeds `HalfWindowEta` and `_update` (:334) sets percent/size/speed/eta; ffmpeg step fires `_on_pp_hook` (:330) → `processing`.
+8. `_run` sets `done` + `filename` from `requested_downloads`; exceptions map to `paused` (suspend on close, partials kept), `cancelled` (with `_cleanup_partials` :366) or `error` (`clean_error` :82).
+9. Meanwhile JS `refresh` (`app.js:150`) polls `get_state` every 500 ms (:372) → `announce` (:129) plays done/error sound, opens error dialog → `render` (:93) rebuilds rows.
 
 ## Known violations
 
-- Known violation: `Api` promises never to raise (docstring `src/vd98/api.py:4`) but `cancel`/`remove` do `int(job_id)` unguarded. Planned fix: SPEC T.7 (B.4).
+- ~~Known violation: `Api` promises never to raise but `cancel`/`remove` do `int(job_id)` unguarded.~~ Fixed 2026-10-06 by `Api._job_id` (B.4 API part, B.29). Still open: `Api.add` with an unhashable preset (B.4, T.7).
 - Known violation: UI logic in one 300-line `app.js` closure (render, state diff, menus, wiring). Acceptable at this size; split if it grows past ~400 lines.
 - Known violation: state-change detection (`announce`) lives in the UI, not the core; a second UI would duplicate it. No fix planned (single UI).

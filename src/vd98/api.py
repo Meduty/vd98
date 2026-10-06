@@ -15,18 +15,21 @@ import webview
 from . import settings as settings_mod
 from .formats import preset_list
 from .manager import DownloadManager
+from .queue_store import QueueStore
 
 
 class Api:
     def __init__(
         self, manager: DownloadManager | None = None, settings_path: Path | None = None
     ):
-        self._manager = manager or DownloadManager()
+        self._manager = manager or DownloadManager(store=QueueStore())
         self._settings_path = settings_path
         self._settings = settings_mod.load(settings_path)
         self._window = None
         self._chrome = None
         self._chrome_lock = threading.Lock()
+        # downloads interrupted last time come back as paused (V.20); none run on their own
+        self._restored = self._manager.restore()
 
     def _attach(self, window) -> None:
         self._window = window
@@ -41,11 +44,32 @@ class Api:
             self.save_settings({"preset": preset})
         return job
 
+    @staticmethod
+    def _job_id(value) -> int | None:
+        """A job id from JS, or None. Only real ints and digit strings: 1.9 must not
+        become job 1, and True must not become job 1 either (V.11, B.4)."""
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+        return None
+
     def cancel(self, job_id):
-        return self._manager.cancel(int(job_id))
+        jid = self._job_id(job_id)
+        return False if jid is None else self._manager.cancel(jid)
 
     def remove(self, job_id):
-        return self._manager.remove(int(job_id))
+        jid = self._job_id(job_id)
+        return False if jid is None else self._manager.remove(jid)
+
+    def resume(self, job_id):
+        jid = self._job_id(job_id)
+        return False if jid is None else self._manager.resume(jid)
+
+    def resume_all(self):
+        return self._manager.resume_all()
 
     def clear_finished(self):
         self._manager.clear_finished()
@@ -59,6 +83,7 @@ class Api:
             **self.get_state(),
             "presets": preset_list(),
             "ffmpeg": bool(shutil.which("ffmpeg")),
+            "restored": self._restored,
         }
 
     # -- settings ---------------------------------------------------------
@@ -122,8 +147,19 @@ class Api:
         if self._window:
             self._window.maximize() if on else self._window.restore()
 
+    def _on_window_closing(self):
+        """pywebview `closing` handler for a WM close (not our title-bar button).
+
+        Suspends like close() (V.21) but always returns None: returning False cancels
+        the close, and suspend() returns False when a job is still converting (PR #3
+        review). The user asked to close; the worker is a daemon and stops with us.
+        Deliberately has no return statement.
+        """
+        self._manager.suspend(timeout=3)
+
     def close(self):
-        self._manager.cancel_all()
+        # suspend, don't cancel: partial files stay and jobs resume next start (V.21)
+        self._manager.suspend(timeout=3)
         if self._window:
             self._window.destroy()
 

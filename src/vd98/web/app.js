@@ -9,6 +9,7 @@
     done: "Done",
     error: "Error",
     cancelled: "Cancelled",
+    paused: "Paused",
   };
   const TERMINAL = new Set(["done", "error", "cancelled"]);
 
@@ -25,6 +26,20 @@
     let i = 0;
     while (bps >= 1024 && i < units.length - 1) { bps /= 1024; i++; }
     return `${bps.toFixed(i ? 1 : 0)} ${units[i]}`;
+  }
+
+  function fmtSize(bytes, estimated) {
+    if (!bytes) return "";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+    return `${estimated ? "~" : ""}${bytes.toFixed(i ? 1 : 0)} ${units[i]}`;
+  }
+
+  function fmtPercent(job) {
+    if (job.status === "queued" && !job.percent) return "";
+    if (job.status === "error" || job.status === "cancelled") return "";
+    return `${(job.percent || 0).toFixed(1)}%`;
   }
 
   function fmtEta(sec) {
@@ -87,6 +102,8 @@
         cell(job.title || job.url),
         cell(status, "status-cell"),
         progressCell(job),
+        cell(fmtPercent(job), "num"),
+        cell(fmtSize(job.total_bytes, job.size_estimated), "num"),
         cell(job.status === "downloading" ? fmtSpeed(job.speed) : ""),
         cell(job.status === "downloading" ? fmtEta(job.eta) : ""),
       );
@@ -100,10 +117,13 @@
     const sel = jobs.find((j) => j.id === selectedId);
     $("cancel").disabled = !sel || TERMINAL.has(sel.status) || sel.status === "processing";
     $("remove").disabled = !sel || !TERMINAL.has(sel.status);
+    $("resume").disabled = !sel || sel.status !== "paused";
 
-    const pending = jobs.filter((j) => !TERMINAL.has(j.status)).length;
+    const paused = jobs.filter((j) => j.status === "paused").length;
+    const pending = jobs.filter((j) => !TERMINAL.has(j.status)).length - paused;
     const done = jobs.filter((j) => j.status === "done").length;
-    $("counts").textContent = `${pending} queued, ${done} done`;
+    $("counts").textContent =
+      `${pending} queued, ` + (paused ? `${paused} paused, ` : "") + `${done} done`;
   }
 
   function announce(jobs) {
@@ -190,6 +210,11 @@
 
   const ACTIONS = {
     "open-folder": () => api.open_folder(),
+    "resume-all": async () => {
+      const n = await api.resume_all();
+      setStatus(n ? `Resumed ${n} download${n === 1 ? "" : "s"}.` : "Nothing to resume.");
+      refresh();
+    },
     browse,
     exit: () => api.close(),
     paste: pasteUrl,
@@ -281,6 +306,11 @@
       await api.cancel(selectedId);
       refresh();
     };
+    $("resume").onclick = async () => {
+      if (selectedId == null) return;
+      if (await api.resume(selectedId)) setStatus("Resuming download...");
+      refresh();
+    };
     $("remove").onclick = async () => {
       if (selectedId == null) return;
       await api.remove(selectedId);
@@ -329,6 +359,9 @@
     render(init.jobs);
     wire();
     $("url").focus();
+    if (init.restored) {
+      setStatus(`Restored ${init.restored} paused download${init.restored === 1 ? "" : "s"}.`);
+    }
     if (!init.ffmpeg) {
       showDialog(
         "FFmpeg Not Found",
