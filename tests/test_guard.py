@@ -72,6 +72,10 @@ def bash(cmd):
         "cat > notes.md <<EOF\n$(cat .env)\nEOF",
         "cat > notes.md <<'EOF'\nx\nEOF\ncat .env",
         "cat <<'EOF' > .env\nKEY=1\nEOF",
+        # a data heredoc whose file the same command runs is code (B.17, upstream review)
+        "cat > /tmp/run.sh <<'EOF'\ncat .env\nEOF\nsh /tmp/run.sh",
+        "trap 'sh /tmp/r.sh' EXIT; cat > /tmp/r.sh <<'EOF'\ncat .env\nEOF",
+        "tee /tmp/r.py <<'EOF'\nprint(open('.env').read())\nEOF\npython3 /tmp/r.py",
     ],
 )
 def test_blocks(cmd):

@@ -28,6 +28,7 @@ tests/test_guard.py keeps the parser honest.
 """
 
 import json
+import os
 import re
 import shlex
 import sys
@@ -98,13 +99,26 @@ def strip_data_heredocs(cmd: str) -> str:
         if nl < 0:
             continue
         head, tail = cmd[line_start : m.start()], cmd[m.end() : nl]
-        if "<<" in head or not DATA_SINK_HEAD.search(head):
+        sink = DATA_SINK_HEAD.search(head)
+        if "<<" in head or not sink or not DATA_SINK_TAIL.match(tail):
             continue
-        if not DATA_SINK_TAIL.match(tail):
+        # a file the same command runs is code: keep the body unless nothing follows the
+        # heredoc and no earlier text (a trap, an alias) names the written file
+        before = cmd[:line_start] + head[: sink.start()]
+        written = re.findall(_SINK_WORD, head[sink.start() :] + tail)
+        names = [
+            os.path.basename(w)
+            for w in written
+            if not w.startswith("-") and w not in ("cat", "tee", "git", "commit")
+        ]
+        if any(n and n in before for n in names):
             continue
         end = _heredoc_end(cmd, nl + 1, m.group(3), bool(m.group(1)))
         if end is None:
             continue
+        after = cmd.find("\n", end)
+        if after >= 0 and cmd[after:].strip():
+            continue  # something runs after the heredoc: it could execute what was written
         cmd = cmd[: nl + 1] + cmd[end:]
         pos = nl + 1
     return cmd
