@@ -97,7 +97,10 @@ fieldset { display: flex; flex-direction: column; gap: 8px; }
 .queue table { width: 100%; table-layout: fixed; }
 .col-title { width: auto; }
 .col-status { width: 90px; }
-.col-progress { width: 130px; }
+.col-progress { width: 110px; }
+.col-pct { width: 52px; }
+.col-size { width: 80px; }
+.queue td.num { text-align: right; }
 .col-speed { width: 80px; }
 .col-eta { width: 56px; }
 .queue td {

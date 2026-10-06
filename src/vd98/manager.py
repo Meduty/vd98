@@ -5,12 +5,14 @@ import os
 import queue
 import re
 import threading
+import time
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 import yt_dlp
 from yt_dlp.utils import DownloadCancelled, DownloadError
 
+from .eta import HalfWindowEta
 from .formats import preset_opts
 from .urls import normalize_url
 
@@ -30,10 +32,14 @@ class Job:
     percent: float = 0.0
     speed: float | None = None
     eta: int | None = None
+    total_bytes: int | None = None
+    size_estimated: bool = False
+    downloaded_bytes: int | None = None
     filename: str = ""
     error: str = ""
     _cancel: threading.Event = field(default_factory=threading.Event, repr=False)
     _tmpfiles: set = field(default_factory=set, repr=False)
+    _eta: HalfWindowEta = field(default_factory=HalfWindowEta, repr=False)
 
     def public(self) -> dict:
         return {
@@ -64,8 +70,9 @@ def clean_error(exc: BaseException) -> str:
 
 
 class DownloadManager:
-    def __init__(self, ydl_factory=yt_dlp.YoutubeDL):
+    def __init__(self, ydl_factory=yt_dlp.YoutubeDL, clock=time.monotonic):
         self._factory = ydl_factory
+        self._clock = clock  # injectable for the ETA tests
         self._jobs: dict[int, Job] = {}
         self._lock = threading.Lock()
         self._queue: queue.Queue[int] = queue.Queue()
@@ -193,16 +200,21 @@ class DownloadManager:
             changes["filename"] = d["filename"]
         if d.get("status") == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate")
+            done = d.get("downloaded_bytes")
             if total:
-                changes["percent"] = round(
-                    100.0 * d.get("downloaded_bytes", 0) / total, 1
-                )
+                changes["percent"] = round(100.0 * (done or 0) / total, 1)
+                changes["total_bytes"] = int(total)
+                changes["size_estimated"] = not d.get("total_bytes")
             elif d.get("fragment_count"):
                 changes["percent"] = round(
                     100.0 * d.get("fragment_index", 0) / d["fragment_count"], 1
                 )
+            if done is not None:
+                changes["downloaded_bytes"] = int(done)
+                job._eta.add(self._clock(), int(done))
+            smoothed = job._eta.eta(int(total) if total else None)
             changes["speed"] = d.get("speed")
-            changes["eta"] = d.get("eta")
+            changes["eta"] = round(smoothed) if smoothed is not None else d.get("eta")
         elif d.get("status") == "finished":
             changes.update(percent=100.0, speed=None, eta=None)
         self._update(job, **changes)

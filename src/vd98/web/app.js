@@ -27,6 +27,20 @@
     return `${bps.toFixed(i ? 1 : 0)} ${units[i]}`;
   }
 
+  function fmtSize(bytes, estimated) {
+    if (!bytes) return "";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+    return `${estimated ? "~" : ""}${bytes.toFixed(i ? 1 : 0)} ${units[i]}`;
+  }
+
+  function fmtPercent(job) {
+    if (job.status === "queued" && !job.percent) return "";
+    if (job.status === "error" || job.status === "cancelled") return "";
+    return `${(job.percent || 0).toFixed(1)}%`;
+  }
+
   function fmtEta(sec) {
     if (sec == null) return "";
     const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
@@ -87,6 +101,8 @@
         cell(job.title || job.url),
         cell(status, "status-cell"),
         progressCell(job),
+        cell(fmtPercent(job), "num"),
+        cell(fmtSize(job.total_bytes, job.size_estimated), "num"),
         cell(job.status === "downloading" ? fmtSpeed(job.speed) : ""),
         cell(job.status === "downloading" ? fmtEta(job.eta) : ""),
       );
