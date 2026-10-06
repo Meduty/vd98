@@ -63,6 +63,15 @@ def bash(cmd):
         # secret dirs still blocked in path form
         "ls secrets/",
         "ls ./secret",
+        # heredoc fed to a shell/interpreter is code (B.15)
+        "python3 - <<'EOF'\nprint(open('.env').read())\nEOF",
+        "bash <<'EOF'\ncat .env\nEOF",
+        "cat <<'EOF' | sh\ncat .env\nEOF",
+        "python3 -c \"$(cat <<'EOF'\nprint(open('.env').read())\nEOF\n)\"",
+        # data heredoc: unquoted delimiter expands, target and trailing lines still count
+        "cat > notes.md <<EOF\n$(cat .env)\nEOF",
+        "cat > notes.md <<'EOF'\nx\nEOF\ncat .env",
+        "cat <<'EOF' > .env\nKEY=1\nEOF",
     ],
 )
 def test_blocks(cmd):
@@ -80,6 +89,10 @@ def test_blocks(cmd):
         "python3 - <<'EOF'\nprint('secrets are never read')\nEOF",
         "cat > notes.md <<'EOF'\nreaches a secret without naming it\nEOF",
         "git commit -F - <<'EOF'\nkeep secrets out\nEOF",
+        # data-sink heredoc naming secret paths is prose (B.15)
+        "cat > review/prompt.md <<'EOF'\nNever read secret/ or .env; ask the user.\nEOF",
+        "git commit -q -F - <<'EOF'\nfix: untrack secret/ and .env.dev\nEOF",
+        "tee -a notes.md <<'EOF'\nuntracked .env and secret/\nEOF",
         "git commit -m 'add -A flag docs'",
         "git commit -m 'all good' --amend",
         "git commit --author='A <a@b>' -m x",

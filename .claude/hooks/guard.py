@@ -55,6 +55,72 @@ GIT_OPTS_WITH_ARG = {
 GIT_METADATA = {"ls-files", "check-ignore", "status"}
 BULK_ADD_PATHSPECS = {".", ":/", ":", "*", "./"}
 
+# Heredocs. A quoted heredoc fed to a data sink (cat, tee, git commit -F -) is text the
+# command never opens or runs, so its body is dropped (8 of 12 real-session blocks were
+# such prose). Every other heredoc body is code for its consumer and is scanned token by
+# token. Same rules as the agentic-repo-prep guide's template guard.
+ANY_HEREDOC = re.compile(r"(?<!<)<<(?!<)(-?)[ \t]*(['\"]?)(\w+)\2")
+QUOTED_HEREDOC = re.compile(r"(?<!<)<<(?!<)(-?)[ \t]*(['\"])(\w+)\2")
+_SINK_SEP = (
+    r"(?:\A|[;&|\n]|(?<![$<>])\()[ \t]*"  # not $( <( >(: they feed other commands
+)
+_SINK_WORD = r"[^\s;&|()<>$`\\]+"
+DATA_SINK_HEAD = re.compile(
+    _SINK_SEP + r"(?:cat|tee)(?:[ \t]+" + _SINK_WORD + r")*"
+    r"(?:[ \t]*>>?[ \t]*" + _SINK_WORD + r")?[ \t]*\Z"
+    r"|" + _SINK_SEP + r"git(?:[ \t]+" + _SINK_WORD + r")*?[ \t]+commit"
+    r"(?:[ \t]+-[A-Za-z]+|[ \t]+--[\w-]+)*?[ \t]+(?:-F|--file)(?:[ \t]*=[ \t]*|[ \t]+)-[ \t]*\Z"
+)
+DATA_SINK_TAIL = re.compile(r"(?:[ \t]*>>?[ \t]*" + _SINK_WORD + r")?[ \t]*\Z")
+
+
+def _heredoc_end(cmd: str, body_start: int, delim: str, dash: bool) -> int | None:
+    """Index of the first delimiter line (bash ends the body there), or None."""
+    k = body_start
+    while k <= len(cmd):
+        e = cmd.find("\n", k)
+        e = len(cmd) if e < 0 else e
+        line = cmd[k:e]
+        if (line.lstrip("\t") if dash else line).rstrip(" \t") == delim:
+            return k
+        if e == len(cmd):
+            return None
+        k = e + 1
+    return None
+
+
+def strip_data_heredocs(cmd: str) -> str:
+    pos = 0
+    while m := QUOTED_HEREDOC.search(cmd, pos):
+        line_start = cmd.rfind("\n", 0, m.start()) + 1
+        nl = cmd.find("\n", m.end())
+        pos = m.end()
+        if nl < 0:
+            continue
+        head, tail = cmd[line_start : m.start()], cmd[m.end() : nl]
+        if "<<" in head or not DATA_SINK_HEAD.search(head):
+            continue
+        if not DATA_SINK_TAIL.match(tail):
+            continue
+        end = _heredoc_end(cmd, nl + 1, m.group(3), bool(m.group(1)))
+        if end is None:
+            continue
+        cmd = cmd[: nl + 1] + cmd[end:]
+        pos = nl + 1
+    return cmd
+
+
+def heredoc_bodies(cmd: str) -> list[str]:
+    bodies, pos = [], 0
+    while m := ANY_HEREDOC.search(cmd, pos):
+        pos = m.end()
+        nl = cmd.find("\n", m.end())
+        if nl < 0:
+            continue
+        end = _heredoc_end(cmd, nl + 1, m.group(3), bool(m.group(1)))
+        bodies.append(cmd[nl + 1 : end if end is not None else len(cmd)])
+    return bodies
+
 
 def is_secret_path(word: str) -> bool:
     raw = word.strip().strip("'\"").replace("\\", "/")
@@ -190,6 +256,13 @@ def check_segment(words: list[str]) -> str | None:
 
 
 def check_bash(command: str) -> str | None:
+    command = strip_data_heredocs(command)
+    for body in heredoc_bodies(command):
+        for tok in CODE_TOKEN.findall(body):
+            if is_secret_path(tok):
+                return (
+                    f"Heredoc body touches a secret-looking path ({tok!r}) (SPEC V.12)."
+                )
     for segment in split_segments(command):
         reason = check_segment(segment)
         if reason:
