@@ -27,9 +27,9 @@
 
 Python core:
 - I.1: `normalize_url(raw) -> str`, raises `InvalidURL(ValueError)` — `src/vd98/urls.py:12`.
-- I.2: `preset_opts(key) -> dict` (fresh copy), raises `ValueError` on unknown key; `preset_list() -> [{key, label}]` — `src/vd98/formats.py:45`, `:57`.
-- I.3: `settings.load(path=None) -> dict`; `settings.save(settings, path=None, base=None) -> dict` (invalid keys fall back to `base` or defaults, atomic tmp+replace) — `src/vd98/settings.py:38`, `:47`.
-- I.4: `DownloadManager(ydl_factory=yt_dlp.YoutubeDL)` — `src/vd98/manager.py:62`. Starts one daemon worker in ctor. Methods: `add(url, preset, dest_dir) -> job` raises `ValueError` (:75); `cancel(id) -> bool` (:87); `cancel_all()` (:97); `remove(id) -> bool` terminal only (:101); `clear_finished()` (:109); `get(id) -> job|None` (:114); `jobs() -> [job]` (:119); `wait_idle(timeout) -> bool` (:123); attr `on_progress(job)` called outside lock.
+- I.2: `preset_opts(key) -> dict` (fresh copy), raises `ValueError` on unknown key; `preset_list() -> [{key, label}]` — `src/vd98/formats.py:49`, `:61`.
+- I.3: `settings.load(path=None) -> dict`; `settings.save(settings, path=None, base=None) -> dict` (invalid keys fall back to `base` or defaults, atomic tmp+replace) — `src/vd98/settings.py:45`, `:54`.
+- I.4: `DownloadManager(ydl_factory=yt_dlp.YoutubeDL)` — `src/vd98/manager.py:66`. Starts one daemon worker in ctor. Methods: `add(url, preset, dest_dir) -> job` raises `ValueError` (:79); `cancel(id) -> bool` (:91); `cancel_all()` (:101); `remove(id) -> bool` terminal only (:105); `clear_finished()` (:113); `get(id) -> job|None` (:118); `jobs() -> [job]` (:123); `wait_idle(timeout) -> bool` (:127); attr `on_progress(job)` called outside lock.
 - I.5: Job dict: `id, url, preset, dest_dir, title, status, percent, speed, eta, filename, error` — `src/vd98/manager.py:23` `Job.public`.
 
 JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS caller in `src/vd98/web/app.js`):
