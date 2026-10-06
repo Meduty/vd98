@@ -35,8 +35,16 @@ def make_manager(script, tmp_path):
 
 def ok_script(fake, url):
     info = {"title": "Clip", "id": "abc"}
-    fake.hook(status="downloading", downloaded_bytes=50, total_bytes=100,
-              speed=1024.0, eta=3, info_dict=info, tmpfilename="x.part", filename="x.mp4")
+    fake.hook(
+        status="downloading",
+        downloaded_bytes=50,
+        total_bytes=100,
+        speed=1024.0,
+        eta=3,
+        info_dict=info,
+        tmpfilename="x.part",
+        filename="x.mp4",
+    )
     fake.hook(status="finished", info_dict=info, filename="x.mp4")
     return {**info, "requested_downloads": [{"filepath": "/tmp/x.mp4"}]}
 
@@ -73,7 +81,9 @@ def test_opts_passed_to_ydl(tmp_path):
 
 def test_download_error_reported(tmp_path):
     def script(fake, url):
-        raise DownloadError("\x1b[0;31mERROR:\x1b[0m [generic] Unsupported URL: https://x")
+        raise DownloadError(
+            "\x1b[0;31mERROR:\x1b[0m [generic] Unsupported URL: https://x"
+        )
 
     m = make_manager(script, tmp_path)
     job = m.add("https://example.com/v", "best", str(tmp_path))
@@ -89,12 +99,22 @@ def test_cancel_running_download_removes_partial(tmp_path):
 
     def script(fake, url):
         part.write_bytes(b"partial")
-        fake.hook(status="downloading", downloaded_bytes=1, total_bytes=10,
-                  tmpfilename=str(part), filename=str(tmp_path / "clip.mp4"))
+        fake.hook(
+            status="downloading",
+            downloaded_bytes=1,
+            total_bytes=10,
+            tmpfilename=str(part),
+            filename=str(tmp_path / "clip.mp4"),
+        )
         started.set()
         release.wait(5)
-        fake.hook(status="downloading", downloaded_bytes=2, total_bytes=10,
-                  tmpfilename=str(part), filename=str(tmp_path / "clip.mp4"))
+        fake.hook(
+            status="downloading",
+            downloaded_bytes=2,
+            total_bytes=10,
+            tmpfilename=str(part),
+            filename=str(tmp_path / "clip.mp4"),
+        )
         return {"title": "never"}
 
     m = make_manager(script, tmp_path)
@@ -182,7 +202,9 @@ def test_remove_active_job_refused(tmp_path):
     m.wait_idle(5)
 
 
-@pytest.mark.parametrize("url,preset", [("file:///etc/passwd", "best"), ("https://x.com", "nope")])
+@pytest.mark.parametrize(
+    "url,preset", [("file:///etc/passwd", "best"), ("https://x.com", "nope")]
+)
 def test_add_rejects_invalid_input(tmp_path, url, preset):
     m = make_manager(ok_script, tmp_path)
     with pytest.raises(ValueError):
@@ -198,7 +220,12 @@ def test_add_rejects_missing_dir(tmp_path):
 
 def test_fragment_progress(tmp_path):
     def script(fake, url):
-        fake.hook(status="downloading", fragment_index=3, fragment_count=4, downloaded_bytes=10)
+        fake.hook(
+            status="downloading",
+            fragment_index=3,
+            fragment_count=4,
+            downloaded_bytes=10,
+        )
         return {"title": "t"}
 
     seen = []

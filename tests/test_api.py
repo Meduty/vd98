@@ -23,7 +23,9 @@ def make_api(tmp_path):
 
 
 def test_add_returns_error_dict_for_bad_url(tmp_path):
-    assert make_api(tmp_path).add("file:///etc/passwd", "best") == {"error": "Only http:// and https:// links are supported."}
+    assert make_api(tmp_path).add("file:///etc/passwd", "best") == {
+        "error": "Only http:// and https:// links are supported."
+    }
 
 
 def test_add_remembers_preset(tmp_path):
@@ -31,13 +33,20 @@ def test_add_remembers_preset(tmp_path):
     job = api.add("https://example.com/v", "mp3")
     assert job["status"] in {"queued", "downloading", "done"}
     assert api.get_state()["settings"]["preset"] == "mp3"
-    assert Api(DownloadManager(ydl_factory=NullYDL), tmp_path / "s.json").get_state()["settings"]["preset"] == "mp3"
+    assert (
+        Api(DownloadManager(ydl_factory=NullYDL), tmp_path / "s.json").get_state()[
+            "settings"
+        ]["preset"]
+        == "mp3"
+    )
 
 
 def test_save_settings_rejects_garbage(tmp_path):
     api = make_api(tmp_path)
     assert "error" in api.save_settings("nope")
-    assert api.save_settings({"download_dir": "/no/such", "sound": False})["download_dir"] == str(tmp_path)
+    assert api.save_settings({"download_dir": "/no/such", "sound": False})[
+        "download_dir"
+    ] == str(tmp_path)
 
 
 def test_open_folder_rejects_missing_dir(tmp_path):
@@ -53,3 +62,28 @@ def test_init_lists_presets(tmp_path):
 def test_about_versions(tmp_path):
     info = make_api(tmp_path).about()
     assert info["app"] and info["yt_dlp"]
+
+
+def test_window_chrome_calls_are_safe_without_window(tmp_path):
+    """SPEC V.11: no window yet (tests, startup) -> False, never an exception."""
+    api = make_api(tmp_path)
+    assert api.start_move() is False
+    assert api.start_resize("se") is False
+    assert api.start_resize("bogus") is False
+
+
+def test_start_resize_rejects_unknown_edge_with_window(tmp_path):
+    from qtpy import QtCore
+
+    class Native(QtCore.QObject):
+        def windowHandle(self):
+            return None
+
+    class Win:
+        native = Native()
+
+    api = make_api(tmp_path)
+    api._attach(Win())
+    assert api.start_resize("bogus") is False
+    assert api.start_resize("se") is True
+    assert api.start_move() is True

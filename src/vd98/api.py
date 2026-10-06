@@ -6,6 +6,7 @@ Every method returns plain JSON-able data; errors come back as {"error": msg}.
 
 import shutil
 import subprocess
+import threading
 from importlib.metadata import version
 from pathlib import Path
 
@@ -17,11 +18,15 @@ from .manager import DownloadManager
 
 
 class Api:
-    def __init__(self, manager: DownloadManager | None = None, settings_path: Path | None = None):
+    def __init__(
+        self, manager: DownloadManager | None = None, settings_path: Path | None = None
+    ):
         self._manager = manager or DownloadManager()
         self._settings_path = settings_path
         self._settings = settings_mod.load(settings_path)
         self._window = None
+        self._chrome = None
+        self._chrome_lock = threading.Lock()
 
     def _attach(self, window) -> None:
         self._window = window
@@ -50,13 +55,19 @@ class Api:
         return {"jobs": self._manager.jobs(), "settings": dict(self._settings)}
 
     def init(self):
-        return {**self.get_state(), "presets": preset_list(), "ffmpeg": bool(shutil.which("ffmpeg"))}
+        return {
+            **self.get_state(),
+            "presets": preset_list(),
+            "ffmpeg": bool(shutil.which("ffmpeg")),
+        }
 
     # -- settings ---------------------------------------------------------
     def save_settings(self, patch):
         if not isinstance(patch, dict):
             return {"error": "Invalid settings."}
-        self._settings = settings_mod.save(patch, self._settings_path, base=self._settings)
+        self._settings = settings_mod.save(
+            patch, self._settings_path, base=self._settings
+        )
         return dict(self._settings)
 
     def choose_folder(self):
@@ -75,10 +86,34 @@ class Api:
             target = target.parent
         if not target.is_dir() or not shutil.which("xdg-open"):
             return False
-        subprocess.Popen(["xdg-open", str(target)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(
+            ["xdg-open", str(target)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         return True
 
     # -- window chrome (custom 98.css title bar) --------------------------
+    def _window_chrome(self):
+        """Lazily create the GUI-thread move/resize bridge once the Qt window exists."""
+        native = getattr(self._window, "native", None)
+        if native is None:
+            return None
+        with self._chrome_lock:
+            if self._chrome is None:
+                from .chrome import WindowChrome  # Qt import only when a window exists
+
+                self._chrome = WindowChrome(native)
+        return self._chrome
+
+    def start_move(self):
+        chrome = self._window_chrome()
+        return bool(chrome and chrome.request_move())
+
+    def start_resize(self, edge):
+        chrome = self._window_chrome()
+        return bool(chrome and chrome.request_resize(edge))
+
     def minimize(self):
         if self._window:
             self._window.minimize()

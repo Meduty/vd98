@@ -21,13 +21,21 @@ def test_non_dict_gives_defaults(tmp_path):
 
 def test_roundtrip(tmp_path):
     p = tmp_path / "sub" / "s.json"
-    saved = settings.save({"download_dir": str(tmp_path), "preset": "mp3", "sound": False}, p)
-    assert settings.load(p) == saved == {"download_dir": str(tmp_path), "preset": "mp3", "sound": False}
+    saved = settings.save(
+        {"download_dir": str(tmp_path), "preset": "mp3", "sound": False}, p
+    )
+    assert (
+        settings.load(p)
+        == saved
+        == {"download_dir": str(tmp_path), "preset": "mp3", "sound": False}
+    )
 
 
 def test_invalid_values_replaced(tmp_path):
     p = tmp_path / "s.json"
-    p.write_text(json.dumps({"download_dir": "/no/such/dir", "preset": "bogus", "sound": "yes"}))
+    p.write_text(
+        json.dumps({"download_dir": "/no/such/dir", "preset": "bogus", "sound": "yes"})
+    )
     assert settings.load(p) == settings.defaults()
 
 
