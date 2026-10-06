@@ -6,11 +6,21 @@ Everything in `AGENTS.md` applies. This file only adds what is specific to Claud
 
 ## Guardrails that run on every tool call
 
-- `.claude/hooks/guard.py` (PreToolUse) blocks bulk staging/committing and any tool call
-  touching secret-looking paths. Exit 2 = blocked; the reason is on stderr.
-  **If the hook or a permission rule blocks you, stop and ask the user. Do not work around it.**
-- `.claude/settings.json` holds the allow/deny rules. Per-user overrides go in
-  `.claude/settings.local.json` (gitignored).
+- **OS sandbox** (`.claude/settings.json` → `sandbox`): every Bash command runs in bubblewrap.
+  Reads of secret paths are denied (child processes too). Writes are limited to the project,
+  `$TMPDIR` and `~/.cache/uv`. Network goes only to the allowed domains. No unsandboxed retry.
+  Check it with `scripts/sandbox_probe.sh check` after the human has run `setup`.
+- **Deny rules** (`.claude/settings.json`): file tools on secret paths, editing the settings,
+  hooks or `.githooks/`, bulk staging, force-push.
+- **`.claude/hooks/guard.py`** (PreToolUse): file-tool path check plus a bulk-staging nudge.
+  It does not parse shell for secrets; the sandbox owns that (SPEC D.11, V.16).
+- **If the sandbox, a deny rule or the hook blocks you, stop and ask the user. Do not work around
+  it**, not with another tool, not via another session. Settings changes are the user's.
+- Known sandbox side effects:
+  - `gh` can't reach the login keyring (401), so the user posts PR comments.
+  - Codex needs OpenAI hosts and `~/.codex`, which aren't allowed, so the user runs reviews.
+  - Placeholder device files show up in `git status` inside the sandbox only; never stage them.
+- Per-user overrides go in `.claude/settings.local.json` (gitignored).
 
 ## Path-scoped rules (load automatically when you touch matching files)
 

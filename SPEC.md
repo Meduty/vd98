@@ -66,14 +66,22 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
   Guard: `tests/test_manager.py::test_cancel_queued_job_never_runs`.
 - V.11: `Api` methods return `{error}` / falsy instead of raising for bad input (docstring `src/vd98/api.py:4`).
   Guard: `tests/test_api.py::test_add_returns_error_dict_for_bad_url`, `::test_save_settings_rejects_garbage`. (Broken: B.4.)
-- V.12: No secrets in git: `.env*`, `*.pem`, `*.key`, `*.jks`, `*.keystore`, `secret/` untracked + gitignored.
-  Guard: `.claude/hooks/guard.py` PreToolUse hook + `.claude/settings.json` deny rules; `tests/test_guard.py` (each new case shown failing against the previous guard). Best effort, word-level, not a sandbox (D.11).
+- V.12: No secret enters git or the agent's context: `.env*`, `.envrc`, `*.pem`, `*.key`, `*.p12`, `*.jks`, `*.keystore`, `secret/`, `secrets/` untracked + gitignored, and unreadable to the agent. Enforced per effect by V.16–V.19 (T.14), not by parsing command text (D.11).
+  Guard: V.16–V.19 guards; `.gitignore`.
 - V.13: Frozen paths C.11 exist at their path.
   Guard: `tests/test_layout.py::test_frozen_paths_exist`.
 - V.14: UI works offline: no `http(s)://` resource loads in `src/vd98/web/*.html|*.css` outside vendor.
   Guard: `tests/test_layout.py::test_ui_has_no_remote_assets`.
 - V.15: Frameless window moves and resizes through the window manager (`QWindow.startSystemMove` / `startSystemResize`), never `QWidget.move`; the Qt calls run on the GUI thread; every `data-edge` handle in `index.html` maps to a known edge.
   Guard: `tests/test_chrome.py::test_requests_from_worker_thread_run_on_gui_thread`, `::test_edge_names_match_ui_handles`, `::test_edges_for_known_names`. Real drag on Wayland: manual (`docs/live/e2e_testing.md`).
+- V.16: Shell commands (and their child processes) cannot read secret paths: Claude Code OS sandbox on (`enabled`, `failIfUnavailable: true`, `allowUnsandboxedCommands: false`) with `sandbox.filesystem.denyRead` for the V.12 names (`.claude/settings.json`). Known limit: a secret created inside the same command that reads it is not covered (Linux expands denyRead wildcards per command).
+  Guard: `scripts/sandbox_probe.sh check` (human runs `setup`/`cleanup` outside the sandbox): 10/11 BLOCKED on 2026-10-06, the leak being the same-command case above; a file created in an earlier command is BLOCKED.
+- V.17: No commit adds a secret, however it was staged: the staged content is scanned by name and for credential-shaped strings (`scripts/check_secrets.py --staged` via `.githooks/pre-commit`, `core.hooksPath=.githooks`); CI scans every tracked file (`--all`). Reports name the file, never the content.
+  Guard: `tests/test_check_secrets.py` (incl. `git add -f` of an ignored key file, no-content-in-report, whole repo clean).
+- V.18: File tools (Read/Edit/Write/Grep/Glob/NotebookEdit) on secret paths are refused: permission deny rules in `**/` (any depth) and `/` (project-relative) form, never `./` (cwd-relative), plus the path check in `.claude/hooks/guard.py`. The agent cannot edit `.claude/settings.json`, `.claude/hooks/**`, `.githooks/**` (deny rules; sandbox protected paths for shell writes).
+  Guard: `tests/test_guard.py::test_file_tools_on_secret_paths_blocked`, `::test_file_tools_on_ordinary_paths_allowed`.
+- V.19: `git add -A|--all|-u|.|:/` and `git commit -a|--all` are nudged toward explicit paths by the hook. A workflow hint with no exemptions, not a security boundary (V.17 is).
+  Guard: `tests/test_guard.py::test_bulk_staging_nudged`, `::test_explicit_staging_allowed`, `::test_shell_secret_reads_are_the_sandboxes_job`.
 
 ## §T Tasks
 
@@ -92,6 +100,7 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
 | T.11 | URL hardening: B.7 | `src/vd98/urls.py` | T.5 | S | todo |
 | T.12 | install-desktop.sh: escape sed replacement, add uninstall, ffmpeg check | `scripts/install-desktop.sh` | T.5 | S | todo |
 | T.13 | CI pinning: pin uv version; consider SHA-pinned actions (D.4) | `.github/workflows/ci.yml` | T.6 | S | todo |
+| T.14 | Effect-level secret protection: sandbox denyRead, staged-content scan (pre-commit + CI), deny rules, guard shrunk to nudge + file-tool paths, sandbox probe | `.claude/settings.json`, `.claude/hooks/guard.py`, `scripts/check_secrets.py`, `scripts/sandbox_probe.sh`, `.githooks/pre-commit`, `.github/workflows/ci.yml` | T.5 | L | doing |
 
 ## §B Bugs / backprop
 
@@ -116,6 +125,9 @@ Found 2026-10-06 by T.5 research; each reproduced or read in code before recordi
 | B.15 | 2026-10-06 | `python3 - <<'EOF'` with a body opening `.env` passed the guard; data heredocs naming `secret/` in path form (reviewer prompts, `git commit -F -` bodies) were blocked | each heredoc body line became its own segment and its first word was never checked; data and code heredocs were not told apart, `.claude/hooks/guard.py` `check_bash` | fixed T.5: quoted heredoc fed to `cat`/`tee`/`git commit -F -` → body dropped (`strip_data_heredocs`); every other heredoc body scanned as code (`heredoc_bodies`). Same rules ported upstream to the agentic-repo-prep guide template | V.12 |
 | B.17 | 2026-10-06 | Body of `cat > /tmp/run.sh <<'EOF'` dropped as data although the same command then ran the file (`sh /tmp/run.sh`), hiding a secret read (found by Codex reviewing the upstream port) | data-sink test looked only at the heredoc's own line, `.claude/hooks/guard.py` `strip_data_heredocs` | fixed T.5: body dropped only if nothing follows the heredoc and no earlier text names the written file; a file run by a later tool call stays out of scope (D.11) | V.12 |
 | B.16 | 2026-10-06 | User report: window can't be dragged by the title bar; edges can't be resized (KDE/GNOME Wayland) | pywebview's drag-region JS calls `QWidget.move()`, which Wayland ignores (clients can't position windows); frameless window has no compositor borders to resize; `src/vd98/web/index.html` `pywebview-drag-region`, `src/vd98/app.py` `frameless=True` | fixed T.5: title-bar `mousedown` → `Api.start_move` → `QWindow.startSystemMove()`; 8 edge handles → `start_resize` → `startSystemResize(edges)`, dispatched to the GUI thread (`src/vd98/chrome.py` `WindowChrome`); double-click title bar toggles maximize | V.15 |
+| B.18 | 2026-10-06 | `bash -lc 'cat .env'` / `sh -ec '…'` not inspected by the guard (Codex, PR #1 round 1) | guard looked for a standalone `-c` only, `.claude/hooks/guard.py` `check_segment` | superseded by T.14: the hook no longer parses shell; probe case "bash -lc string" BLOCKED by the sandbox | V.16 |
+| B.19 | 2026-10-06 | Globs expanding to secret files (`cat ./.*`, `git add -f ./*`) not seen by the guard (Codex, PR #1 round 1) | guard checked literal words, not expansions | superseded by T.14: probe cases "glob ./.*", "glob *.pem" BLOCKED; staged `-f` keys caught by `check_secrets.py` | V.16, V.17 |
+| B.20 | 2026-10-06 | A heredoc operator inside a comment made the guard skip lines bash runs (upstream review round 2, same code here) | text search for `<<'EOF'` instead of bash's parse | superseded by T.14: heredoc exemption gone with the parser; probe case "heredoc fed to python" BLOCKED | V.16 |
 
 ## §D Deferred / design questions
 
@@ -129,4 +141,4 @@ Found 2026-10-06 by T.5 research; each reproduced or read in code before recordi
 - D.8: Vendored MS Sans Serif webfonts ship inside 98.css package (MIT); no separate font attribution in README. Add credit line? Open.
 - D.9: README says settings in `~/.config/video-downloader-98/`; code honours `$XDG_CONFIG_HOME`. Reword README? Open.
 - D.10: Each `DownloadManager` leaks a daemon worker (tests create many). No `shutdown()`. Open.
-- D.11: `.claude/hooks/guard.py` inspects words, not effects: a command reaching a secret without naming it (`grep -R TOKEN .`, a script file that opens one) passes. Options: accept (repo has no secrets, C.6) · enable Claude Code OS sandbox. Recommendation: accept for now (guard + deny rules stop accidents; a block means stop and ask); enable sandbox if a secret is ever added. Open (user decision).
+- D.11: `.claude/hooks/guard.py` inspects words, not effects: a command reaching a secret without naming it (`grep -R TOKEN .`, a script file that opens one) passes. Options: accept (repo has no secrets, C.6) · enable Claude Code OS sandbox. Recommendation: accept for now (guard + deny rules stop accidents; a block means stop and ask); enable sandbox if a secret is ever added. **Decided 2026-10-06 (user):** after three review rounds kept finding holes in text parsing, prototype effect-level enforcement instead: sandbox for shell reads, deny rules for file tools, staged-content scan for commits (T.14, V.16–V.19).

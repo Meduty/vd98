@@ -1,4 +1,4 @@
-> **Status: LIVING** — must match `scripts/ui_snapshot.py`, `src/vd98/manager.py`.
+> **Status: LIVING** — must match `scripts/ui_snapshot.py`, `scripts/sandbox_probe.sh`, `src/vd98/manager.py`.
 > **Scope:** how "done" is verified in the running app. **Reconciled:** 2026-10-06.
 
 # End-to-end verification
@@ -34,6 +34,20 @@ Window chrome checklist (SPEC V.15; the live window can't be captured or driven 
 3. Double-click the title bar: maximizes; again: restores. Resize handles are off while maximized.
 4. Title-bar buttons still minimize / maximize / close; clicking them doesn't start a drag.
 `tests/test_chrome.py` covers the thread hand-off and edge names, not the compositor.
+
+## Secret protection change → sandbox probe
+
+Settings, `guard.py`, `check_secrets.py` or the sandbox config touched (SPEC V.16–V.19):
+
+1. **Human**, outside the sandbox: `! scripts/sandbox_probe.sh setup`. This creates fake, gitignored
+   fixtures (`.env`, `secret/probe.txt`, `probe-fixture/server.pem`) carrying a marker string.
+2. **Agent**, inside the sandbox: `scripts/sandbox_probe.sh check`. Every line must say
+   `BLOCKED`, and the control must say `OK`. Expected: one `LEAKED file created mid-session`,
+   which is the documented per-command limit (V.16). Anything else leaking is a regression.
+   Inside the sandbox, `secret/probe.txt` shows as `hidden`; that's normal.
+3. **Human**: `! scripts/sandbox_probe.sh cleanup`.
+
+The probe prints BLOCKED/LEAKED only, never file contents.
 
 ## Download path change → real smoke
 

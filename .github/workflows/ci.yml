@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Secret scan (names + credential-shaped content, SPEC V.12)
+        run: python3 scripts/check_secrets.py --all
       - uses: astral-sh/setup-uv@v10.2.0
       - name: Install dependencies
         run: uv sync --locked

@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Refuse commits that would add secrets (SPEC V.12). Enable once per clone:
+#   git config core.hooksPath .githooks
+# CI runs the same check on every push, so skipping this hook (--no-verify) only
+# moves the failure to the pull request.
+exec python3 "$(git rev-parse --show-toplevel)/scripts/check_secrets.py" --staged
