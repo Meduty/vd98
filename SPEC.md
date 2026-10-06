@@ -133,6 +133,7 @@ Found 2026-10-06 by T.5 research; each reproduced or read in code before recordi
 | B.23 | 2026-10-06 | `git -c core.hooksPath=… commit` / `-n` / `--no-verify` skipped the pre-commit scan (Codex, PR #2 round 1) | only `--no-verify` was denied | fixed as a nudge: guard `skips_precommit` + deny rules. Not a boundary: CI's `--all` scan is the backstop, so a skipped local scan can still put a secret on a pushed branch before CI runs | V.17, V.19 |
 | B.24 | 2026-10-06 | `sandbox_probe.sh check` would overwrite and delete a real `.env.late` (Codex, PR #2 round 1) | fixed fixture name | fixed: `.env.probe-late-$$`, skipped if it exists | V.16 |
 | B.25 | 2026-10-06 | `env git add -A` / `sudo …` / `nice -n 5 …` got no staging nudge (Codex, PR #2 round 1) | `git_call` required `git` as the first word | fixed: `_strip_prefixes` looks through wrappers and `VAR=x` | V.19 |
+| B.30 | 2026-10-06 | Grep/Glob/Read with a bare relative path `secret` / `secrets` (no slash) passed the file-tool check (Codex, PR #3 round 1) | leftover Bash-prose exemption: the last path part only counted as the folder when the value contained `/`, `.claude/hooks/guard.py` `is_secret_path` | fixed: every path part is checked (the shell parser that needed the exemption is gone); `test_bare_relative_secret_dir_blocked` (4 cases failed before), words that merely contain "secret" stay allowed. Installed by the user (hook locked) | V.18 |
 
 ## §D Deferred / design questions
 

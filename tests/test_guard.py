@@ -184,3 +184,30 @@ def test_file_tool_globs_that_can_match_secrets_blocked(tool, inp):
 def test_wrappers_and_hook_skips_nudged(cmd):
     """Findings 4 and 6: wrappers hid bulk staging; hooksPath / --no-verify skip pre-commit."""
     assert bash(cmd) is not None, cmd
+
+
+# PR #3 review round 1, finding 4 (2026-10-06)
+@pytest.mark.parametrize(
+    "tool,inp",
+    [
+        ("Grep", {"pattern": "x", "path": "secret"}),
+        ("Grep", {"pattern": "x", "path": "secrets"}),
+        ("Glob", {"pattern": "*", "path": "secret"}),
+        ("Read", {"file_path": "secrets"}),
+    ],
+)
+def test_bare_relative_secret_dir_blocked(tool, inp):
+    """A file-tool path is a path: bare `secret` (no slash) names the folder."""
+    assert guard.check({"tool_name": tool, "tool_input": inp}) is not None
+
+
+@pytest.mark.parametrize(
+    "tool,inp",
+    [
+        ("Grep", {"pattern": "secret", "path": "src"}),
+        ("Read", {"file_path": "docs/secret-handling.md"}),
+        ("Glob", {"pattern": "secretary/*.py"}),
+    ],
+)
+def test_words_that_only_contain_secret_allowed(tool, inp):
+    assert guard.check({"tool_name": tool, "tool_input": inp}) is None

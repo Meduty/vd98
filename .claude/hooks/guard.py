@@ -88,7 +88,10 @@ def is_secret_path(value: str) -> bool:
     if not parts:
         return False
     dirs, base = parts[:-1], parts[-1]
-    for p in dirs + ([base] if "/" in raw else []):
+    # every part, the last one too: a file-tool path is a path, so a bare `secret`
+    # names the folder (PR #3 review). The old Bash-prose exemption for the bare word
+    # went away with the shell parser.
+    for p in dirs + [base]:
         if p in SECRET_DIRS:
             return True
         if (

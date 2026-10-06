@@ -17,8 +17,13 @@ Everything in `AGENTS.md` applies. This file only adds what is specific to Claud
 - **If the sandbox, a deny rule or the hook blocks you, stop and ask the user. Do not work around
   it**, not with another tool, not via another session. Settings changes are the user's.
 - Known sandbox side effects:
-  - `gh` can't reach the login keyring (401), so the user posts PR comments.
-  - Codex needs OpenAI hosts and `~/.codex`, which aren't allowed, so the user runs reviews.
+  - `gh` / `git push`: the login keyring is unreachable (HTTP 401). Intended fix (user
+    settings): `GH_TOKEN` masked via `sandbox.credentials`, with Claude Code started as
+    `export GH_TOKEN=$(gh auth token) && claude`. Not yet verified; until it is, the user
+    pushes and posts PR comments.
+  - Codex works inside the sandbox (verified 2026-10-06) via user settings: `~/.codex` in
+    `allowWrite` plus OpenAI hosts in `allowedDomains`. Run `scripts/review.sh` yourself.
+    Caveat: `~/.codex/auth.json` is readable from inside.
   - Placeholder device files show up in `git status` inside the sandbox only; never stage them.
 - Per-user overrides go in `.claude/settings.local.json` (gitignored).
 
