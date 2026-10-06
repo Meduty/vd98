@@ -76,4 +76,24 @@ Cancel path: start a large video (`https://www.youtube.com/watch?v=aqz-KE-bpKQ`,
 preset `best`), cancel once `percent > 1`, expect status `cancelled` and no
 `.part` files left in `$SCRATCH`.
 
+Resume path (SPEC V.20, V.21): same large video, preset `720p`, with
+`DownloadManager(store=QueueStore(<scratch>/state/queue.json))`.
+1. Once `percent >= 3`, call `suspend(timeout=10)`. Expect `True`, status
+   `paused`, the `.part` file kept, and 1 saved entry.
+2. Create a new manager on the same store and call `restore()`. Expect `1`, and
+   the job `paused` at its old percent.
+3. Call `resume(id)`. Expect the `.part` file to grow from its old size (yt-dlp
+   continues, it doesn't restart).
+4. Call `cancel`. Expect `cancelled` and no `.part` left.
+
+Run 2026-10-06 (inside the sandbox):
+- suspended at 14.6% of 71.3 MB with the `.part` at 10,422,070 B;
+- restored at 14.6%;
+- after resuming, the `.part` reached 12,518,198 B and 17.6%;
+- cancel left 0 `.part` files.
+
+GUI check for the user: start a download, close the window, reopen. Expect a
+"Restored 1 paused download." status, the row `Paused` with its old %/Size,
+and Resume enabled when the row is selected.
+
 Network-dependent; never part of `pytest` (SPEC V.5).

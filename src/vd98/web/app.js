@@ -9,6 +9,7 @@
     done: "Done",
     error: "Error",
     cancelled: "Cancelled",
+    paused: "Paused",
   };
   const TERMINAL = new Set(["done", "error", "cancelled"]);
 
@@ -116,10 +117,13 @@
     const sel = jobs.find((j) => j.id === selectedId);
     $("cancel").disabled = !sel || TERMINAL.has(sel.status) || sel.status === "processing";
     $("remove").disabled = !sel || !TERMINAL.has(sel.status);
+    $("resume").disabled = !sel || sel.status !== "paused";
 
-    const pending = jobs.filter((j) => !TERMINAL.has(j.status)).length;
+    const paused = jobs.filter((j) => j.status === "paused").length;
+    const pending = jobs.filter((j) => !TERMINAL.has(j.status)).length - paused;
     const done = jobs.filter((j) => j.status === "done").length;
-    $("counts").textContent = `${pending} queued, ${done} done`;
+    $("counts").textContent =
+      `${pending} queued, ` + (paused ? `${paused} paused, ` : "") + `${done} done`;
   }
 
   function announce(jobs) {
@@ -206,6 +210,11 @@
 
   const ACTIONS = {
     "open-folder": () => api.open_folder(),
+    "resume-all": async () => {
+      const n = await api.resume_all();
+      setStatus(n ? `Resumed ${n} download${n === 1 ? "" : "s"}.` : "Nothing to resume.");
+      refresh();
+    },
     browse,
     exit: () => api.close(),
     paste: pasteUrl,
@@ -297,6 +306,11 @@
       await api.cancel(selectedId);
       refresh();
     };
+    $("resume").onclick = async () => {
+      if (selectedId == null) return;
+      if (await api.resume(selectedId)) setStatus("Resuming download...");
+      refresh();
+    };
     $("remove").onclick = async () => {
       if (selectedId == null) return;
       await api.remove(selectedId);
@@ -345,6 +359,9 @@
     render(init.jobs);
     wire();
     $("url").focus();
+    if (init.restored) {
+      setStatus(`Restored ${init.restored} paused download${init.restored === 1 ? "" : "s"}.`);
+    }
     if (!init.ffmpeg) {
       showDialog(
         "FFmpeg Not Found",

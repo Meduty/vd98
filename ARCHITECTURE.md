@@ -28,6 +28,8 @@ Owns jobs, one worker thread, yt-dlp calls, cancel, partial cleanup. No GUI impo
 | URL validation | `src/vd98/urls.py:12` `normalize_url` |
 | Format presets → yt-dlp opts | `src/vd98/formats.py` `PRESETS`, `preset_opts`, `preset_list` |
 | Settings JSON | `src/vd98/settings.py` `load`, `save`, `config_path` |
+| Unfinished-jobs queue across restarts | `src/vd98/queue_store.py` `QueueStore`, `state_path`; manager `suspend`, `restore`, `resume`, `_persist` |
+| Smoothed ETA | `src/vd98/eta.py` `HalfWindowEta`; fed from `_on_hook` with the injected clock |
 
 ### 2. Bridge: `Api`
 

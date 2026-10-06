@@ -14,7 +14,7 @@
 - C.2: Engine = yt-dlp as Python lib. `ffmpeg` on PATH needed for merge + audio extract; absence → warning dialog only (`src/vd98/api.py` `Api.init`, `src/vd98/web/app.js` `start`).
 - C.3: GUI = pywebview Qt backend, frameless window, `private_mode=True` (`src/vd98/app.py` `run`). UI = HTML/CSS/JS in `src/vd98/web/`, offline; 98.css v0.1.21 + MS Sans Serif webfonts vendored in `src/vd98/web/vendor/` with MIT notice `98.css.LICENSE`.
 - C.4: Entry points: `vd98 = "vd98:main"` (`pyproject.toml`), `python -m vd98` (`src/vd98/__main__.py`).
-- C.5: State: in-memory job list only (lost on exit). Persistent: `$XDG_CONFIG_HOME/video-downloader-98/settings.json`, fallback `~/.config/…` (`src/vd98/settings.py` `config_path`). Keys: `download_dir`, `preset`, `sound`.
+- C.5: State: job list in memory; unfinished jobs (queued/downloading/processing/paused) also persisted to `$XDG_STATE_HOME/video-downloader-98/queue.json`, fallback `~/.local/state/…` (`src/vd98/queue_store.py` `state_path`), so they survive restarts (V.20). Settings: `$XDG_CONFIG_HOME/video-downloader-98/settings.json`, fallback `~/.config/…` (`src/vd98/settings.py` `config_path`). Keys: `download_dir`, `preset`, `sound`.
 - C.6: Secrets: none. No tokens, keys, signing. Guard anyway (V.12).
 - C.7: Privacy: no telemetry. Network only to URLs user submits (via yt-dlp).
 - C.8: Platform: Linux only. Desktop launcher user-local via `scripts/install-desktop.sh`; bakes absolute uv + repo path.
@@ -30,7 +30,8 @@ Python core:
 - I.2: `preset_opts(key) -> dict` (fresh copy), raises `ValueError` on unknown key; `preset_list() -> [{key, label}]` — `src/vd98/formats.py:49`, `:61`.
 - I.3: `settings.load(path=None) -> dict`; `settings.save(settings, path=None, base=None) -> dict` (invalid keys fall back to `base` or defaults, atomic tmp+replace) — `src/vd98/settings.py:45`, `:54`.
 - I.4: `DownloadManager(ydl_factory=yt_dlp.YoutubeDL)` — `src/vd98/manager.py:66`. Starts one daemon worker in ctor. Methods: `add(url, preset, dest_dir) -> job` raises `ValueError` (:79); `cancel(id) -> bool` (:91); `cancel_all()` (:101); `remove(id) -> bool` terminal only (:105); `clear_finished()` (:113); `get(id) -> job|None` (:118); `jobs() -> [job]` (:123); `wait_idle(timeout) -> bool` (:127); attr `on_progress(job)` called outside lock.
-- I.5: Job dict: `id, url, preset, dest_dir, title, status, percent, speed, eta, filename, error` — `src/vd98/manager.py:23` `Job.public`.
+- I.5: Job dict: `id, url, preset, dest_dir, title, status, percent, speed, eta, total_bytes, size_estimated, downloaded_bytes, filename, error` — `src/vd98/manager.py` `Job.public`. `eta` is the half-window estimate (V.22), falling back to yt-dlp's.
+- I.4a: `DownloadManager(ydl_factory, clock=time.monotonic, store=None)`; `suspend(timeout) -> bool`, `restore() -> int`, `resume(id) -> bool`, `resume_all() -> int`; `cancel(id)` also accepts paused jobs (cleans their partials) — `src/vd98/manager.py`.
 
 JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS caller in `src/vd98/web/app.js`):
 - I.6: `add(url, preset) -> job | {error}` — caller `addUrl`.
@@ -41,6 +42,7 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
 - I.11: `open_folder(path=None) -> bool` — `xdg-open` on dir (file → parent).
 - I.12: `minimize()`, `maximize(on)`, `close()` (cancels all jobs, destroys window); `about() -> {app, yt_dlp}`.
 - I.13: `start_move() -> bool`, `start_resize(edge) -> bool` (`edge` ∈ `n s e w ne nw se sw`) — hand a title-bar drag / edge drag to the window manager via `WindowChrome` (`src/vd98/chrome.py`); False when no window or unknown edge. Callers: `#titlebar` and `.rs` handle `mousedown` in `src/vd98/web/app.js` `wire`.
+- I.14: `resume(id) -> bool` (bad id → False), `resume_all() -> int`; `init()` adds `restored: int`; `close()` suspends instead of cancelling (V.21). Callers: `#resume` button, File → Resume All in `src/vd98/web/app.js`.
 
 ## §V Invariants
 
@@ -50,8 +52,8 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
   Guard: `tests/test_api.py::test_open_folder_rejects_missing_dir` (partial; no grep guard → T.9).
 - V.3: One worker thread per `DownloadManager`; downloads strictly sequential.
   Guard: `tests/test_manager.py::test_sequential_single_worker`.
-- V.4: Job status ∈ {queued, downloading, processing, done, error, cancelled}. Terminal = {done, error, cancelled}; terminal status never changes.
-  Guard: `tests/test_manager.py::test_terminal_state_is_final`, `::test_terminal_set`.
+- V.4: Job status ∈ {queued, downloading, processing, paused, done, error, cancelled}. Terminal = {done, error, cancelled}; terminal status never changes. `paused` is not terminal: only `resume` (→ queued) or `cancel` (→ cancelled) leave it.
+  Guard: `tests/test_manager.py::test_terminal_state_is_final`, `::test_terminal_set`, `tests/test_resume.py::test_paused_is_not_terminal`.
 - V.5: Tests run offline: manager tested via fake `ydl_factory`; no network in `tests/`.
   Guard: unguarded (convention; `FakeYDL` in `tests/test_manager.py`).
 - V.6: Missing/corrupt/invalid settings file → defaults; `load` never raises.
@@ -82,6 +84,12 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
   Guard: `tests/test_guard.py::test_file_tools_on_secret_paths_blocked`, `::test_file_tools_on_ordinary_paths_allowed`, `::test_symlink_to_secret_file_blocked`; shell writes: `os.access(…, W_OK)` is False for those three paths inside the sandbox (checked 2026-10-06).
 - V.19: `git add -A|--all|-u|.|:/` and `git commit -a|--all` are nudged toward explicit paths by the hook. A workflow hint with no exemptions, not a security boundary (V.17 is).
   Guard: `tests/test_guard.py::test_bulk_staging_nudged`, `::test_explicit_staging_allowed`, `::test_shell_secret_reads_are_the_sandboxes_job`.
+- V.20: Unfinished jobs survive an app restart: every status change saves them (`QueueStore`, atomic); on start they come back as `paused` and nothing runs until the user resumes. A missing, corrupt or partly invalid queue file yields only the valid entries, never an exception (same rules as V.1, V.7 for url/preset).
+  Guard: `tests/test_queue_store.py`, `tests/test_resume.py::test_restore_then_resume_finishes_and_clears_store`, `tests/test_api.py::test_restored_jobs_reported_by_init`.
+- V.21: Closing the app never deletes partial files: close (title bar or WM) suspends (`DownloadManager.suspend`), the running job becomes `paused` with its `.part` kept; only an explicit cancel cleans up.
+  Guard: `tests/test_resume.py::test_suspend_keeps_partial_and_pauses` (mutation-checked: routing suspend through cancel fails 3 tests), `tests/test_api.py::test_close_suspends_instead_of_cancelling`; real smoke in `docs/live/e2e_testing.md`.
+- V.22: ETA = remaining bytes ÷ rate over the most recent half of what was downloaded (from when the download had half its current size to now); a new file restarts the window; a stall gives no ETA, not a huge one.
+  Guard: `tests/test_eta.py`, `tests/test_manager_progress.py::test_eta_comes_from_half_window_not_yt_dlp` (fails if wired back to yt-dlp's ETA).
 
 ## §T Tasks
 
@@ -101,6 +109,9 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
 | T.12 | install-desktop.sh: escape sed replacement, add uninstall, ffmpeg check | `scripts/install-desktop.sh` | T.5 | S | todo |
 | T.13 | CI pinning: pin uv version; consider SHA-pinned actions (D.4) | `.github/workflows/ci.yml` | T.6 | S | todo |
 | T.14 | Effect-level secret protection: sandbox denyRead, staged-content scan (pre-commit + CI), deny rules, guard shrunk to nudge + file-tool paths, sandbox probe | `.claude/settings.json`, `.claude/hooks/guard.py`, `scripts/check_secrets.py`, `scripts/sandbox_probe.sh`, `.githooks/pre-commit`, `.github/workflows/ci.yml` | T.5 | L | doing |
+| T.15 | `%` and `Size` columns (size `~` when estimated) | `src/vd98/manager.py`, `src/vd98/web/{index.html,app.js,app.css}` | T.3 | S | done |
+| T.16 | Smoothed ETA over the most recent half of the download (V.22) | `src/vd98/eta.py`, `src/vd98/manager.py` | T.3 | S | done |
+| T.17 | Resume downloads after an accidental close: persisted queue, close = suspend keeping partials, restore as paused, Resume / Resume All (V.20, V.21) | `src/vd98/queue_store.py`, `src/vd98/manager.py`, `src/vd98/api.py`, `src/vd98/app.py`, `src/vd98/web/` | T.3 | M | done |
 
 ## §B Bugs / backprop
 

@@ -15,18 +15,21 @@ import webview
 from . import settings as settings_mod
 from .formats import preset_list
 from .manager import DownloadManager
+from .queue_store import QueueStore
 
 
 class Api:
     def __init__(
         self, manager: DownloadManager | None = None, settings_path: Path | None = None
     ):
-        self._manager = manager or DownloadManager()
+        self._manager = manager or DownloadManager(store=QueueStore())
         self._settings_path = settings_path
         self._settings = settings_mod.load(settings_path)
         self._window = None
         self._chrome = None
         self._chrome_lock = threading.Lock()
+        # downloads interrupted last time come back as paused (V.20); none run on their own
+        self._restored = self._manager.restore()
 
     def _attach(self, window) -> None:
         self._window = window
@@ -47,6 +50,15 @@ class Api:
     def remove(self, job_id):
         return self._manager.remove(int(job_id))
 
+    def resume(self, job_id):
+        try:
+            return self._manager.resume(int(job_id))
+        except (TypeError, ValueError):
+            return False  # V.11: bad input -> falsy, never an exception
+
+    def resume_all(self):
+        return self._manager.resume_all()
+
     def clear_finished(self):
         self._manager.clear_finished()
         return True
@@ -59,6 +71,7 @@ class Api:
             **self.get_state(),
             "presets": preset_list(),
             "ffmpeg": bool(shutil.which("ffmpeg")),
+            "restored": self._restored,
         }
 
     # -- settings ---------------------------------------------------------
@@ -123,7 +136,8 @@ class Api:
             self._window.maximize() if on else self._window.restore()
 
     def close(self):
-        self._manager.cancel_all()
+        # suspend, don't cancel: partial files stay and jobs resume next start (V.21)
+        self._manager.suspend(timeout=3)
         if self._window:
             self._window.destroy()
 

@@ -17,6 +17,7 @@ from .formats import preset_opts
 from .urls import normalize_url
 
 TERMINAL = {"done", "error", "cancelled"}
+UNFINISHED = {"queued", "downloading", "processing", "paused"}  # persisted (V.20)
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _PREFIX = re.compile(r"^(ERROR:\s*)?(\[[^\]]+\]\s*)?")
 
@@ -40,6 +41,21 @@ class Job:
     _cancel: threading.Event = field(default_factory=threading.Event, repr=False)
     _tmpfiles: set = field(default_factory=set, repr=False)
     _eta: HalfWindowEta = field(default_factory=HalfWindowEta, repr=False)
+    _suspend: bool = field(default=False, repr=False)
+
+    def persisted(self) -> dict:
+        """What the queue store keeps so the download can resume after a restart."""
+        return {
+            "url": self.url,
+            "preset": self.preset,
+            "dest_dir": self.dest_dir,
+            "title": self.title,
+            "filename": self.filename,
+            "tmpfiles": sorted(self._tmpfiles),
+            "percent": self.percent,
+            "total_bytes": self.total_bytes,
+            "size_estimated": self.size_estimated,
+        }
 
     def public(self) -> dict:
         return {
@@ -70,9 +86,17 @@ def clean_error(exc: BaseException) -> str:
 
 
 class DownloadManager:
-    def __init__(self, ydl_factory=yt_dlp.YoutubeDL, clock=time.monotonic):
+    def __init__(self, ydl_factory=yt_dlp.YoutubeDL, clock=time.monotonic, store=None):
         self._factory = ydl_factory
         self._clock = clock  # injectable for the ETA tests
+        self._store = (
+            store  # QueueStore or None: unfinished jobs survive restarts (V.20)
+        )
+        self._persist_lock = threading.Lock()
+        self._suspending = False
+        self._running: Job | None = None
+        self._run_done = threading.Event()
+        self._run_done.set()
         self._jobs: dict[int, Job] = {}
         self._lock = threading.Lock()
         self._queue: queue.Queue[int] = queue.Queue()
@@ -92,18 +116,89 @@ class DownloadManager:
             job = Job(id=next(self._ids), url=url, preset=preset, dest_dir=dest_dir)
             self._jobs[job.id] = job
             self._idle.clear()
+            self._suspending = False
         self._queue.put(job.id)
+        self._persist()
         return job.public()
 
     def cancel(self, job_id: int) -> bool:
+        paused = None
         with self._lock:
             job = self._jobs.get(job_id)
             if not job or job.status in TERMINAL:
                 return False
             job._cancel.set()
-            if job.status == "queued":
+            if job.status == "paused":
+                paused = job  # not running: clean up its kept partials here
+            if job.status in ("queued", "paused"):
                 job.status = "cancelled"
+        if paused is not None:
+            self._cleanup_partials(paused)
+        self._persist()
         return True
+
+    def suspend(self, timeout: float = 5.0) -> bool:
+        """Stop for app exit, keeping partial files (V.21): running and queued -> paused.
+
+        Returns False if the running job didn't stop within `timeout` (e.g. ffmpeg was
+        converting; that job may still finish as done).
+        """
+        with self._lock:
+            self._suspending = True
+            running = self._running
+            for job in self._jobs.values():
+                if job.status == "queued":
+                    job.status = "paused"
+            if running is not None and running.status not in TERMINAL:
+                running._suspend = True
+                running._cancel.set()
+        stopped = self._run_done.wait(timeout)
+        self._persist()
+        return stopped
+
+    def restore(self) -> int:
+        """Load unfinished jobs from the store as paused; nothing runs until resumed."""
+        if self._store is None:
+            return 0
+        entries = self._store.load()
+        with self._lock:
+            for e in entries:
+                job = Job(
+                    id=next(self._ids),
+                    url=e["url"],
+                    preset=e["preset"],
+                    dest_dir=e["dest_dir"],
+                    title=e["title"],
+                    status="paused",
+                    percent=e["percent"],
+                    total_bytes=e["total_bytes"],
+                    size_estimated=e["size_estimated"],
+                    filename=e["filename"],
+                )
+                job._tmpfiles.update(e["tmpfiles"])
+                self._jobs[job.id] = job
+        return len(entries)
+
+    def resume(self, job_id: int) -> bool:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job or job.status != "paused":
+                return False
+            job.status = "queued"
+            job._cancel = threading.Event()
+            job._suspend = False
+            job._eta = HalfWindowEta()
+            self._suspending = False
+            self._idle.clear()
+        self._queue.put(
+            job_id
+        )  # yt-dlp continues the .part (continuedl is on by default)
+        self._persist()
+        return True
+
+    def resume_all(self) -> int:
+        paused = [j["id"] for j in self.jobs() if j["status"] == "paused"]
+        return sum(self.resume(jid) for jid in paused)
 
     def cancel_all(self) -> None:
         for job in self.jobs():
@@ -140,11 +235,21 @@ class DownloadManager:
             job_id = self._queue.get()
             with self._lock:
                 job = self._jobs.get(job_id)
-                runnable = job is not None and job.status == "queued"
+                runnable = (
+                    job is not None and job.status == "queued" and not self._suspending
+                )
                 if runnable:
                     job.status = "downloading"
+                    self._running = job
+                    self._run_done.clear()
             if runnable:
-                self._run(job)
+                self._persist()
+                try:
+                    self._run(job)
+                finally:
+                    with self._lock:
+                        self._running = None
+                    self._run_done.set()
             with self._lock:
                 if self._queue.empty():
                     self._idle.set()
@@ -176,8 +281,11 @@ class DownloadManager:
                 eta=None,
             )
         except DownloadCancelled:
-            self._cleanup_partials(job)
-            self._update(job, status="cancelled", speed=None, eta=None)
+            if job._suspend:  # app closing: keep partials so the download can resume
+                self._update(job, status="paused", speed=None, eta=None)
+            else:
+                self._cleanup_partials(job)
+                self._update(job, status="cancelled", speed=None, eta=None)
         except DownloadError as exc:
             self._update(
                 job, status="error", error=clean_error(exc), speed=None, eta=None
@@ -233,8 +341,23 @@ class DownloadManager:
                     job, k, min(v, 100.0) if k == "percent" and v is not None else v
                 )
             snapshot = job.public()
+        if "status" in changes:
+            self._persist()  # on status changes only, not on every progress tick
         if self.on_progress:
             self.on_progress(snapshot)
+
+    def _persist(self) -> None:
+        """Save unfinished jobs (V.20). Never raises; a full disk only loses resume info."""
+        if self._store is None:
+            return
+        with self._lock:
+            entries = [
+                j.persisted() for j in self._jobs.values() if j.status in UNFINISHED
+            ]
+        with (
+            self._persist_lock
+        ):  # one writer at a time: the store uses a fixed tmp name
+            self._store.save(entries)
 
     def _cleanup_partials(self, job: Job) -> None:
         dest = Path(job.dest_dir).resolve()

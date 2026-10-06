@@ -87,3 +87,44 @@ def test_start_resize_rejects_unknown_edge_with_window(tmp_path):
     assert api.start_resize("bogus") is False
     assert api.start_resize("se") is True
     assert api.start_move() is True
+
+
+def test_resume_bad_input_returns_false(tmp_path):
+    """SPEC V.11: bad ids from JS are falsy, never an exception."""
+    api = make_api(tmp_path)
+    assert api.resume("not-a-number") is False
+    assert api.resume(None) is False
+    assert api.resume(999) is False  # unknown id
+    assert api.resume_all() == 0
+
+
+def test_restored_jobs_reported_by_init(tmp_path):
+    from vd98.queue_store import QueueStore
+
+    store = QueueStore(tmp_path / "queue.json")
+    store.save(
+        [{"url": "https://example.com/v", "preset": "best", "dest_dir": str(tmp_path)}]
+    )
+    api = Api(
+        DownloadManager(ydl_factory=NullYDL, store=store),
+        settings_path=tmp_path / "s.json",
+    )
+    data = api.init()
+    assert data["restored"] == 1
+    assert [j["status"] for j in data["jobs"]] == ["paused"]  # nothing auto-starts
+
+
+def test_close_suspends_instead_of_cancelling(tmp_path):
+    calls = []
+
+    class Spy(DownloadManager):
+        def suspend(self, timeout=5.0):
+            calls.append(("suspend", timeout))
+            return True
+
+        def cancel_all(self):
+            calls.append(("cancel_all",))
+
+    api = Api(Spy(ydl_factory=NullYDL), settings_path=tmp_path / "s.json")
+    api.close()
+    assert calls == [("suspend", 3)]
