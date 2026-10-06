@@ -17,10 +17,14 @@ Everything in `AGENTS.md` applies. This file only adds what is specific to Claud
 - **If the sandbox, a deny rule or the hook blocks you, stop and ask the user. Do not work around
   it**, not with another tool, not via another session. Settings changes are the user's.
 - Known sandbox side effects:
-  - `gh` / `git push`: the login keyring is unreachable (HTTP 401). Intended fix (user
-    settings): `GH_TOKEN` masked via `sandbox.credentials`, with Claude Code started as
-    `export GH_TOKEN=$(gh auth token) && claude`. Not yet verified; until it is, the user
-    pushes and posts PR comments.
+  - `gh` works inside the sandbox (verified 2026-10-06: view, comment, edit, update-branch,
+    checks, merge, branch delete) via user settings: `GH_TOKEN` masked through
+    `sandbox.credentials` (`injectHosts` `api.github.com`, `github.com`; needs
+    `network.tlsTerminate`), with Claude Code started as
+    `export GH_TOKEN=$(gh auth token) && claude`. Without the export: HTTP 401.
+  - `git push` / `fetch` over HTTPS still fail (401) even with the masked token; likely cause,
+    unverified: git sends the placeholder base64-encoded in Basic auth, so the proxy never
+    swaps it. The user pushes; everything else on GitHub goes through `gh`.
   - Codex works inside the sandbox (verified 2026-10-06) via user settings: `~/.codex` in
     `allowWrite` plus OpenAI hosts in `allowedDomains`. Run `scripts/review.sh` yourself.
     Caveat (accepted, SPEC D.12): `~/.codex/auth.json` is readable by shell commands inside,
