@@ -23,7 +23,9 @@ Everything in `AGENTS.md` applies. This file only adds what is specific to Claud
     pushes and posts PR comments.
   - Codex works inside the sandbox (verified 2026-10-06) via user settings: `~/.codex` in
     `allowWrite` plus OpenAI hosts in `allowedDomains`. Run `scripts/review.sh` yourself.
-    Caveat: `~/.codex/auth.json` is readable from inside.
+    Caveat (accepted, SPEC D.12): `~/.codex/auth.json` is readable by shell commands inside,
+    because Codex needs it there. File tools are blocked from `~/.codex` by the hook. Never
+    read or print it.
   - Placeholder device files show up in `git status` inside the sandbox only; never stage them.
 - Per-user overrides go in `.claude/settings.local.json` (gitignored).
 

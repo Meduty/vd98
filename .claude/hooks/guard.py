@@ -217,11 +217,14 @@ def skips_precommit(
 
 def env_skips_precommit(words: list[str]) -> str | None:
     """`GIT_CONFIG_KEY_0=core.hooksPath ... git commit` sets the hooks path from the
-    environment instead of `-c` (PR #3 review round 2). Same nudge, same caveat."""
+    environment instead of `-c` (PR #3 review round 2). Same nudge, same caveat.
+    Every assignment before the `git` word counts, also after `env`/`sudo` (round 3)."""
     for w in words:
+        if w.rsplit("/", 1)[-1] == "git":
+            break
         name, _, value = w.partition("=")
         if not _ or not name.isidentifier():
-            break  # past the leading assignments
+            continue  # a wrapper (`env`, `sudo -E`) or its option
         if name.startswith("GIT_CONFIG") and "hookspath" in value.lower():
             return "The pre-commit hook runs the secret scan (V.17); commit without skipping it."
     return None
@@ -255,6 +258,35 @@ def real_path(value: str, cwd: str | None) -> str | None:
         return None
 
 
+def _codex_home() -> str:
+    home = os.environ.get("CODEX_HOME") or "~/.codex"
+    return os.path.realpath(os.path.expanduser(home))
+
+
+# Folders the file tools never open (SPEC D.12). The sandbox can't deny these to
+# shell commands: Codex runs sandboxed and reads/refreshes its login there.
+PRIVATE_DIRS = [_codex_home()]
+
+
+def private_path(tool: str, value: str, cwd: str | None) -> bool:
+    """True if the path (or a glob's literal prefix) is inside a private folder,
+    or, for Grep, is a folder above one (Grep would recurse into it)."""
+    if not value:
+        return False
+    full = os.path.join(cwd or os.getcwd(), os.path.expanduser(value))
+    cut = min((full.find(c) for c in GLOB_CHARS if c in full), default=len(full))
+    try:
+        target = os.path.realpath(full[:cut] or os.sep)
+    except (OSError, ValueError):
+        return False
+    for d in PRIVATE_DIRS:
+        if target == d or target.startswith(d + os.sep):
+            return True
+        if tool == "Grep" and d.startswith(target.rstrip(os.sep) + os.sep):
+            return True
+    return False
+
+
 def check(payload: dict) -> str | None:
     tool = payload.get("tool_name", "")
     inp = payload.get("tool_input") or {}
@@ -284,6 +316,8 @@ def check(payload: dict) -> str | None:
             return (
                 f"{tool} on {value!r} is blocked: it resolves to a secret-looking path."
             )
+        if private_path(tool, value, payload.get("cwd")):
+            return f"{tool} on {value!r} is blocked: it reaches the Codex login (SPEC D.12)."
     return None
 
 

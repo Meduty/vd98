@@ -18,12 +18,17 @@ MARK="PROBE_MARKER_""7f3a"   # split so this file never contains the marker itse
 # the same, so check needs proof that setup ran (PR #2 review round 2, finding 5)
 SENTINEL="$(git rev-parse --git-dir)/sandbox-probe-setup"
 FIXTURES=(".env" "secret/probe.txt" "probe-fixture/server.pem"
-          "probe-fixture/config/secrets/token.txt" "probe-fixture/config/.envrc")
+          "probe-fixture/config/secrets/token.txt" "probe-fixture/config/.envrc"
+          "probe-fixture/id_ed25519")
 
 setup() {
-  if [ -e .env ] && ! grep -q "$MARK" .env 2>/dev/null; then
-    echo "refusing: .env exists and is not a probe fixture (a real one?)" >&2; exit 2
-  fi
+  # never overwrite (and later delete) a real file: every fixture path, not only .env
+  # (PR #2 review round 3, finding 5)
+  for f in "${FIXTURES[@]}"; do
+    if [ -e "$f" ] && ! grep -q "$MARK" "$f" 2>/dev/null; then
+      echo "refusing: $f exists and is not a probe fixture (a real one?)" >&2; exit 2
+    fi
+  done
   mkdir -p secret probe-fixture/config/secrets
   for f in "${FIXTURES[@]}"; do printf '%s=fake\n' "$MARK" > "$f"; done
   for f in "${FIXTURES[@]}"; do
@@ -80,6 +85,7 @@ EOF"
   attempt "nested secrets/ via python"     python3 -c "print(open('probe-fixture/config/secrets/token.txt').read())"
   attempt "nested secrets/ via glob"       bash -c 'cat probe-fixture/config/secrets/*'
   attempt "nested .envrc"                  cat probe-fixture/config/.envrc
+  attempt "ssh key name"                   cat probe-fixture/id_ed25519
   # unique name, and never touch a file that already exists (review finding: a real
   # .env.late would have been overwritten and deleted)
   local late=".env.probe-late-$$"

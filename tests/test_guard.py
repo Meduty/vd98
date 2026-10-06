@@ -9,6 +9,7 @@ scripts/check_secrets.py (tests/test_check_secrets.py).
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -257,6 +258,12 @@ def test_ordinary_symlink_allowed(tmp_path):
             " git commit -m x"
         ),
         "GIT_CONFIG_PARAMETERS=\"'core.hooksPath'='/tmp/x'\" git commit -m x",
+        # PR #2 review round 3, finding 6 (B.41): assignments after a wrapper
+        (
+            "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath"
+            " GIT_CONFIG_VALUE_0=/tmp/x git commit -m x"
+        ),
+        "sudo -E GIT_CONFIG_PARAMETERS=\"'core.hooksPath'='/tmp/x'\" git commit -m x",
         "git config core.hooksPath /dev/null",
         "git config --local core.hooksPath /tmp/x",
         "git config --unset core.hooksPath",
@@ -278,3 +285,52 @@ def test_hookspath_overrides_nudged(cmd):
 )
 def test_ordinary_config_and_env_allowed(cmd):
     assert bash(cmd) is None, cmd
+
+
+# SPEC D.12 (decided: accept for the shell, block for file tools). raising=False
+# only so the pre-change guard fails on behaviour instead of a fixture error.
+@pytest.fixture
+def codex_home(tmp_path, monkeypatch):
+    home = tmp_path / "codex"
+    home.mkdir()
+    (home / "auth.json").write_text("{}")
+    monkeypatch.setattr(guard, "PRIVATE_DIRS", [os.path.realpath(home)], raising=False)
+    return home
+
+
+def run(tool, inp, cwd):
+    return guard.check({"tool_name": tool, "tool_input": inp, "cwd": str(cwd)})
+
+
+@pytest.mark.parametrize(
+    "tool,key,rel",
+    [
+        ("Read", "file_path", "codex/auth.json"),
+        ("Read", "file_path", "codex/config.toml"),
+        ("Grep", "path", "codex"),
+        ("Glob", "pattern", "codex/*"),
+        ("Grep", "path", "."),  # a folder above: Grep would recurse into it
+    ],
+)
+def test_codex_login_unreachable_by_file_tools(codex_home, tool, key, rel):
+    inp = {key: rel} if tool != "Grep" else {"pattern": "x", key: rel}
+    assert run(tool, inp, codex_home.parent) is not None
+
+
+def test_codex_login_via_symlink_blocked(codex_home, tmp_path):
+    (tmp_path / "notes.json").symlink_to(codex_home / "auth.json")
+    assert run("Read", {"file_path": "notes.json"}, tmp_path) is not None
+
+
+@pytest.mark.parametrize(
+    "tool,inp",
+    [
+        ("Read", {"file_path": "project/README.md"}),
+        ("Grep", {"pattern": "x", "path": "project"}),
+        ("Glob", {"pattern": "*"}),  # lists names only, never contents
+    ],
+)
+def test_ordinary_paths_next_to_codex_home_allowed(codex_home, tool, inp):
+    (codex_home.parent / "project").mkdir()
+    (codex_home.parent / "project" / "README.md").write_text("hi")
+    assert run(tool, inp, codex_home.parent) is None

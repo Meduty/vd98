@@ -23,3 +23,8 @@ secrets/
 
 # Claude Code per-user local settings
 .claude/settings.local.json
+# SSH private keys (public halves .pub stay allowed)
+id_rsa
+id_ed25519
+id_ecdsa
+id_dsa

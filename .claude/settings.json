@@ -80,7 +80,15 @@
         "~/.bw_session",
         "./**/.envrc",
         "./**/secret",
-        "./**/secrets"
+        "./**/secrets",
+        "./id_rsa",
+        "./**/id_rsa",
+        "./id_ed25519",
+        "./**/id_ed25519",
+        "./id_ecdsa",
+        "./**/id_ecdsa",
+        "./id_dsa",
+        "./**/id_dsa"
       ]
     },
     "network": {
