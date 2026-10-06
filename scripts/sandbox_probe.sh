@@ -14,6 +14,9 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 MARK="PROBE_MARKER_""7f3a"   # split so this file never contains the marker itself
+# setup leaves this behind; inside the sandbox a missing fixture and a hidden one look
+# the same, so check needs proof that setup ran (PR #2 review round 2, finding 5)
+SENTINEL="$(git rev-parse --git-dir)/sandbox-probe-setup"
 FIXTURES=(".env" "secret/probe.txt" "probe-fixture/server.pem"
           "probe-fixture/config/secrets/token.txt" "probe-fixture/config/.envrc")
 
@@ -26,12 +29,14 @@ setup() {
   for f in "${FIXTURES[@]}"; do
     git check-ignore -q "$f" || { echo "NOT gitignored: $f (fix .gitignore first)" >&2; exit 2; }
   done
+  printf '%s\n' "${FIXTURES[@]}" > "$SENTINEL"
   echo "fixtures created (fake, gitignored): ${FIXTURES[*]}"
 }
 
 cleanup() {
   for f in "${FIXTURES[@]}"; do grep -q "$MARK" "$f" 2>/dev/null && rm -f "$f"; done
   rmdir probe-fixture/config/secrets probe-fixture/config secret probe-fixture 2>/dev/null || true
+  rm -f "$SENTINEL"
   echo "fixtures removed"
 }
 
@@ -50,6 +55,10 @@ attempt() {  # attempt <label> <command...>
 check() {
   # Inside a working sandbox a denied path may not even be visible (stat fails), so
   # visibility is reported, not required. Run `setup` first (outside the sandbox).
+  if [ ! -f "$SENTINEL" ]; then
+    echo "NO SETUP: run \`scripts/sandbox_probe.sh setup\` (human) first; nothing tested" >&2
+    exit 2
+  fi
   for f in "${FIXTURES[@]}"; do
     [ -e "$f" ] && echo "visible  $f" || echo "hidden   $f (not even stat-able from here)"
   done

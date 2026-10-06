@@ -77,7 +77,10 @@
         "./**/*.kdbx",
         "~/.ssh",
         "~/.aws",
-        "~/.bw_session"
+        "~/.bw_session",
+        "./**/.envrc",
+        "./**/secret",
+        "./**/secrets"
       ]
     },
     "network": {

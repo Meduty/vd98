@@ -20,7 +20,8 @@ What remains here:
      reading contents.
   2. Git nudges (workflow hints, not a security boundary; CI's scan is the backstop):
      `git add -A|--all|-u|.|:/`, `git commit -a|--all`, and skipping the pre-commit
-     scan (`--no-verify`, `-n`, `-c core.hooksPath=...`). Wrappers such as `env`,
+     scan (`--no-verify`, `-n`, `-c core.hooksPath=...`, `GIT_CONFIG_*` env,
+     `git config core.hooksPath <other>`). Wrappers such as `env`,
      `sudo`, `nice -n 5` and `VAR=x` prefixes are looked through.
 
 Protocol: JSON on stdin; exit 2 + reason on stderr blocks; exit 0 allows.
@@ -29,6 +30,7 @@ Unparseable input is allowed (fail-open); the boundaries above don't depend on i
 
 import fnmatch
 import json
+import os
 import shlex
 import sys
 
@@ -213,13 +215,58 @@ def skips_precommit(
     return None
 
 
+def env_skips_precommit(words: list[str]) -> str | None:
+    """`GIT_CONFIG_KEY_0=core.hooksPath ... git commit` sets the hooks path from the
+    environment instead of `-c` (PR #3 review round 2). Same nudge, same caveat."""
+    for w in words:
+        name, _, value = w.partition("=")
+        if not _ or not name.isidentifier():
+            break  # past the leading assignments
+        if name.startswith("GIT_CONFIG") and "hookspath" in value.lower():
+            return "The pre-commit hook runs the secret scan (V.17); commit without skipping it."
+    return None
+
+
+def config_skips_precommit(sub: str | None, args: list[str]) -> str | None:
+    """`git config core.hooksPath /dev/null` (or `--unset`) turns the scan off for
+    every later commit (PR #2 review round 2). Reading it, or setting `.githooks`, is fine."""
+    if sub != "config":
+        return None
+    low = [a.lower() for a in args]
+    if "core.hookspath" not in low:
+        return None
+    rest = args[low.index("core.hookspath") + 1 :]
+    if "--unset" in low or "--unset-all" in low or "--remove-section" in low:
+        return "The pre-commit hook runs the secret scan (V.17); keep core.hooksPath=.githooks."
+    if rest and rest[0].rstrip("/") not in (".githooks", "./.githooks"):
+        return "The pre-commit hook runs the secret scan (V.17); keep core.hooksPath=.githooks."
+    return None
+
+
+def real_path(value: str, cwd: str | None) -> str | None:
+    """Where a literal path really points (symlinks resolved), or None for globs."""
+    if not value or GLOB_CHARS & set(value):
+        return None
+    try:
+        return os.path.realpath(
+            os.path.join(cwd or os.getcwd(), os.path.expanduser(value))
+        )
+    except (OSError, ValueError):
+        return None
+
+
 def check(payload: dict) -> str | None:
     tool = payload.get("tool_name", "")
     inp = payload.get("tool_input") or {}
     if tool == "Bash":
         for words in segments(str(inp.get("command", ""))):
             sub, args, global_opts = git_call(words)
-            reason = bulk_staging(sub, args) or skips_precommit(sub, args, global_opts)
+            reason = (
+                bulk_staging(sub, args)
+                or skips_precommit(sub, args, global_opts)
+                or config_skips_precommit(sub, args)
+                or (env_skips_precommit(words) if sub == "commit" else None)
+            )
             if reason:
                 return reason
         return None
@@ -227,8 +274,16 @@ def check(payload: dict) -> str | None:
         if tool == "Grep" and key == "pattern":
             continue  # a regex over contents, not a path
         value = inp.get(key)
-        if isinstance(value, str) and is_secret_path(value):
+        if not isinstance(value, str):
+            continue
+        if is_secret_path(value):
             return f"{tool} on secret-looking path {value!r} is blocked (SPEC V.12)."
+        # a harmless-looking name can be a symlink to a secret (PR #3 review round 2)
+        target = real_path(value, payload.get("cwd"))
+        if target and is_secret_path(target):
+            return (
+                f"{tool} on {value!r} is blocked: it resolves to a secret-looking path."
+            )
     return None
 
 

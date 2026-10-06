@@ -211,3 +211,70 @@ def test_bare_relative_secret_dir_blocked(tool, inp):
 )
 def test_words_that_only_contain_secret_allowed(tool, inp):
     assert guard.check({"tool_name": tool, "tool_input": inp}) is None
+
+
+# PR #3 review round 2, finding 5 (SPEC B.35)
+def test_symlink_to_secret_file_blocked(tmp_path):
+    """A harmless-looking name that links to a secret file is the secret file."""
+    (tmp_path / ".env").write_text("fake")
+    (tmp_path / "notes.txt").symlink_to(tmp_path / ".env")
+    payload = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": "notes.txt"},
+        "cwd": str(tmp_path),
+    }
+    assert guard.check(payload) is not None
+
+
+def test_symlink_to_secret_dir_blocked(tmp_path):
+    (tmp_path / "secrets").mkdir()
+    (tmp_path / "docs").symlink_to(tmp_path / "secrets")
+    payload = {
+        "tool_name": "Grep",
+        "tool_input": {"pattern": "x", "path": "docs"},
+        "cwd": str(tmp_path),
+    }
+    assert guard.check(payload) is not None
+
+
+def test_ordinary_symlink_allowed(tmp_path):
+    (tmp_path / "real.txt").write_text("hi")
+    (tmp_path / "link.txt").symlink_to(tmp_path / "real.txt")
+    payload = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": "link.txt"},
+        "cwd": str(tmp_path),
+    }
+    assert guard.check(payload) is None
+
+
+# PR #3 review round 2, finding 6 (SPEC B.36); PR #2 review round 2, finding 4 (B.37)
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        (
+            "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/tmp/x"
+            " git commit -m x"
+        ),
+        "GIT_CONFIG_PARAMETERS=\"'core.hooksPath'='/tmp/x'\" git commit -m x",
+        "git config core.hooksPath /dev/null",
+        "git config --local core.hooksPath /tmp/x",
+        "git config --unset core.hooksPath",
+    ],
+)
+def test_hookspath_overrides_nudged(cmd):
+    assert bash(cmd) is not None, cmd
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "GIT_AUTHOR_NAME=x git commit -m 'msg'",
+        "git config core.hooksPath .githooks",
+        "git config --get core.hooksPath",
+        "git config core.hooksPath",
+        "git config user.name x",
+    ],
+)
+def test_ordinary_config_and_env_allowed(cmd):
+    assert bash(cmd) is None, cmd
