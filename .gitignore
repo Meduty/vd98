@@ -5,3 +5,20 @@ __pycache__/
 .ruff_cache/
 dist/
 build/
+
+# Secrets never enter git (SPEC V.12)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.kdbx
+secret/
+secrets/
+
+# Claude Code per-user local settings
+.claude/settings.local.json
