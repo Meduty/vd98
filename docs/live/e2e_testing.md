@@ -35,12 +35,17 @@ Window chrome checklist (SPEC V.15; the live window can't be captured or driven 
 4. Title-bar buttons still minimize / maximize / close; clicking them doesn't start a drag.
 `tests/test_chrome.py` covers the thread hand-off and edge names, not the compositor.
 
+Run 2026-10-06 by the user on `main` at `2029353` (Wayland): items 1 and 2 pass
+(title-bar drag, edge resize). Items 3 and 4 not checked in that run.
+
 ## Secret protection change → sandbox probe
 
 Settings, `guard.py`, `check_secrets.py` or the sandbox config touched (SPEC V.16–V.19):
 
 1. **Human**, outside the sandbox: `! scripts/sandbox_probe.sh setup`. This creates fake, gitignored
-   fixtures (`.env`, `secret/probe.txt`, `probe-fixture/server.pem`) carrying a marker string.
+   fixtures carrying a marker string (`.env`, `secret/probe.txt`, `probe-fixture/server.pem`,
+   nested `secrets/` and `.envrc`, an SSH key name) plus a "setup ran" marker in `.git/`;
+   `check` refuses to run without it. Setup refuses to overwrite any existing non-fixture file.
 2. **Agent**, inside the sandbox: `scripts/sandbox_probe.sh check`. Expected result: every
    attempt says `BLOCKED` **except** `file created mid-session`, which says `LEAKED`. That
    one is the documented per-command limit (V.16). Any other `LEAKED` line, or a control line
@@ -95,5 +100,9 @@ Run 2026-10-06 (inside the sandbox):
 GUI check for the user: start a download, close the window, reopen. Expect a
 "Restored 1 paused download." status, the row `Paused` with its old %/Size,
 and Resume enabled when the row is selected.
+
+Run 2026-10-06 by the user on `main` at `2029353`: passed. The % and Size columns
+showed values during the download; after close and reopen the row was `Paused`, and
+Resume continued it.
 
 Network-dependent; never part of `pytest` (SPEC V.5).
