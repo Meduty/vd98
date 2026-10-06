@@ -18,7 +18,7 @@
 - C.6: Secrets: none. No tokens, keys, signing. Guard anyway (V.12).
 - C.7: Privacy: no telemetry. Network only to URLs user submits (via yt-dlp).
 - C.8: Platform: Linux only. Desktop launcher user-local via `scripts/install-desktop.sh`; bakes absolute uv + repo path.
-- C.9: CI: GitHub Actions `.github/workflows/ci.yml` on push to main + PR: `uv sync --locked` → `ruff check` → `pytest -q`. Actions tag-pinned; uv version unpinned.
+- C.9: CI: GitHub Actions `.github/workflows/ci.yml` on push to main + PR: `uv sync --locked` → `ruff check` → `ruff format --check` → `pytest -q`. Actions tag-pinned; uv version unpinned.
 - C.10: Language: English UI + docs.
 - C.11: Frozen paths (never move/rename): `src/vd98/web/vendor/`, script name `vd98`, `scripts/install-desktop.sh`, settings dir name `APP_DIR = "video-downloader-98"` (`src/vd98/settings.py`). Reason: license notice + `index.html` refs; installed launchers; README; user data location.
 - C.12: Agents: Claude Code (`CLAUDE.md`, `.claude/`) + Codex CLI (`AGENTS.md`). Cross-model reviewer = Codex.
@@ -81,7 +81,7 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
 | T.3 | api + window + web UI | `src/vd98/{api,app}.py`, `src/vd98/web/` | T.2 | L | done |
 | T.4 | CI, README, desktop entry, GH repo | `.github/`, `README.md`, `scripts/` | T.3 | S | done |
 | T.5 | Agentic repo prep (this setup) | `SPEC.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/`, `docs/` | T.4 | L | doing |
-| T.6 | Format whole tree with `ruff format`, add format gate to CI | `src/`, `tests/`, `.github/workflows/ci.yml` | T.5 | S | todo |
+| T.6 | Format whole tree with `ruff format`, add format gate to CI | `src/`, `tests/`, `.github/workflows/ci.yml` | T.5 | S | done |
 | T.7 | Fix settings type robustness: B.1, B.4 | `src/vd98/settings.py`, `src/vd98/formats.py`, `src/vd98/api.py` | T.5 | S | todo |
 | T.8 | Fix manager races/gaps: B.2, B.3, B.5, B.6 | `src/vd98/manager.py` | T.5 | M | todo |
 | T.9 | Grep guards for V.2, V.9; test V.8 path-escape branch | `tests/` | T.5 | S | todo |
