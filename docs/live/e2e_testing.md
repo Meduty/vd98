@@ -41,10 +41,11 @@ Settings, `guard.py`, `check_secrets.py` or the sandbox config touched (SPEC V.1
 
 1. **Human**, outside the sandbox: `! scripts/sandbox_probe.sh setup`. This creates fake, gitignored
    fixtures (`.env`, `secret/probe.txt`, `probe-fixture/server.pem`) carrying a marker string.
-2. **Agent**, inside the sandbox: `scripts/sandbox_probe.sh check`. Every line must say
-   `BLOCKED`, and the control must say `OK`. Expected: one `LEAKED file created mid-session`,
-   which is the documented per-command limit (V.16). Anything else leaking is a regression.
-   Inside the sandbox, `secret/probe.txt` shows as `hidden`; that's normal.
+2. **Agent**, inside the sandbox: `scripts/sandbox_probe.sh check`. Expected result: every
+   attempt says `BLOCKED` **except** `file created mid-session`, which says `LEAKED`. That
+   one is the documented per-command limit (V.16). Any other `LEAKED` line, or a control line
+   that isn't `OK`, is a regression. The script therefore exits 1 even when the result is as
+   expected. Inside the sandbox, `secret/probe.txt` shows as `hidden`; that's normal.
 3. **Human**: `! scripts/sandbox_probe.sh cleanup`.
 
 The probe prints BLOCKED/LEAKED only, never file contents.

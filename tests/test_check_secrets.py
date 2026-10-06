@@ -21,7 +21,21 @@ FAKE = {
     "GitHub token": b"token = gh" + b"p_" + b"A" * 36,
     "AWS access key id": b"AKIA" + b"ABCDEFGHIJKLMNOP",
     "JWT": b"eyJ" + b"a" * 12 + b".eyJ" + b"b" * 12 + b"." + b"c" * 12,
+    # review finding 8: every content rule needs its own case
+    "GitHub fine-grained token": b"github_" + b"pat_" + b"A" * 60,
+    "OpenAI/Anthropic-style key": b"key=sk-" + b"ant-" + b"a" * 40,
+    "Slack token": b"xox" + b"b-" + b"1" * 12,
 }
+
+
+def test_every_content_rule_has_a_case():
+    assert set(FAKE) == set(cs.CONTENT_RULES)
+
+
+def test_large_files_are_scanned_too():
+    """Review finding 3: a credential past the old 2 MB cut-off was accepted."""
+    blob = b"x" * 2_100_000 + b"\n" + FAKE["GitHub token"]
+    assert cs.check([("big.log", blob)]) == ["big.log: contains a GitHub token"]
 
 
 @pytest.mark.parametrize(

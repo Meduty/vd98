@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: file-tool path check + bulk-staging nudge (SPEC V.12, V.19).
+"""PreToolUse hook: file-tool path check + git nudges (SPEC V.12, V.18, V.19).
 
 This hook no longer tries to stop shell commands from reading secrets. Doing that
 from command TEXT means predicting what bash will do (functions, aliases, globs,
@@ -9,20 +9,25 @@ protection now sits where the effect happens:
   * shell reads   -> Claude Code OS sandbox, `sandbox.filesystem.denyRead`
                      (.claude/settings.json); test: scripts/sandbox_probe.sh
   * file tools    -> permission deny rules (.claude/settings.json) + this hook's
-                     path check below (paths are exact; nothing to parse)
+                     path check below (file tools run outside the sandbox)
   * commits       -> scripts/check_secrets.py on the staged CONTENT
                      (.githooks/pre-commit, and CI on every push)
 
 What remains here:
   1. Read/Edit/Write/Grep/Glob/NotebookEdit on a secret-looking path -> block.
-  2. `git add -A|--all|-u|.|:/` and `git commit -a|--all` -> block with a hint.
-     A workflow nudge, not a security boundary: anything it misses is caught by
-     check_secrets.py before the commit lands. It has no exemptions to get wrong.
+     A glob with literal parts (`*.p?x`, `secr?t/*`) is matched against example
+     secret names; a pure wildcard (`*`, `**/*`) is not, since listing names isn't
+     reading contents.
+  2. Git nudges (workflow hints, not a security boundary; CI's scan is the backstop):
+     `git add -A|--all|-u|.|:/`, `git commit -a|--all`, and skipping the pre-commit
+     scan (`--no-verify`, `-n`, `-c core.hooksPath=...`). Wrappers such as `env`,
+     `sudo`, `nice -n 5` and `VAR=x` prefixes are looked through.
 
 Protocol: JSON on stdin; exit 2 + reason on stderr blocks; exit 0 allows.
 Unparseable input is allowed (fail-open); the boundaries above don't depend on it.
 """
 
+import fnmatch
 import json
 import shlex
 import sys
@@ -31,6 +36,26 @@ SECRET_EXTS = (".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".kdbx")
 SECRET_DIRS = {"secret", "secrets"}
 SSH_KEYS = ("id_rsa", "id_ed25519", "id_ecdsa", "id_dsa")
 ENV_ALLOWED = {".env.example", ".env.sample", ".env.template"}
+# Names a glob is tried against (review finding: `*.p?x` hid `.pfx`).
+SECRET_NAME_EXAMPLES = [
+    ".env",
+    ".env.local",
+    ".env.production",
+    ".envrc",
+    ".env_prod",
+    ".env-local",
+    "server.pem",
+    "server.key",
+    "cert.p12",
+    "cert.pfx",
+    "release.jks",
+    "release.keystore",
+    "vault.kdbx",
+    "id_rsa",
+    "id_ed25519",
+    "id_ecdsa",
+]
+GLOB_CHARS = set("*?[")
 FILE_TOOL_KEYS = ("file_path", "notebook_path", "path", "glob", "pattern")
 
 SEPARATOR_CHARS = set(";&|()\n")
@@ -43,24 +68,44 @@ GIT_OPTS_WITH_ARG = {
     "--exec-path",
 }
 BULK_ADD_PATHSPECS = {".", ":/", ":", "*", "./"}
+WRAPPERS = {"sudo", "doas", "env", "command", "nohup", "time", "nice", "exec", "ionice"}
+WRAPPER_OPTS_WITH_ARG = {"-n", "-u", "-g", "-c", "-p"}
+
+
+def _is_glob(part: str) -> bool:
+    return bool(GLOB_CHARS & set(part))
+
+
+def _pure_wildcard(part: str) -> bool:
+    """`*`, `**`, `*.*`: matches anything, so it says nothing about secrets."""
+    return not part.strip("*?.[]!-")
 
 
 def is_secret_path(value: str) -> bool:
-    """A path (or glob) that names a secret file or folder."""
+    """A path (or glob) that names, or can match, a secret file or folder."""
     raw = value.strip().replace("\\", "/")
     parts = [p for p in raw.rstrip("/").split("/") if p not in ("", ".")]
     if not parts:
         return False
-    if any(p in SECRET_DIRS for p in parts[:-1]) or (
-        parts[-1] in SECRET_DIRS and "/" in raw
-    ):
-        return True
-    base = parts[-1]
+    dirs, base = parts[:-1], parts[-1]
+    for p in dirs + ([base] if "/" in raw else []):
+        if p in SECRET_DIRS:
+            return True
+        if (
+            _is_glob(p)
+            and not _pure_wildcard(p)
+            and any(fnmatch.fnmatchcase(d, p) for d in SECRET_DIRS)
+        ):
+            return True
     if base in ENV_ALLOWED:
         return False
     if base.startswith(".env") or base.endswith(SECRET_EXTS):
         return True
-    return base.startswith(SSH_KEYS) and not base.endswith(".pub")
+    if base.startswith(SSH_KEYS) and not base.endswith(".pub"):
+        return True
+    if _is_glob(base) and not _pure_wildcard(base):
+        return any(fnmatch.fnmatchcase(name, base) for name in SECRET_NAME_EXAMPLES)
+    return False
 
 
 def segments(command: str) -> list[list[str]]:
@@ -86,21 +131,39 @@ def segments(command: str) -> list[list[str]]:
     return out
 
 
-def git_call(words: list[str]) -> tuple[str | None, list[str]]:
-    while words and ("=" in words[0] and not words[0].startswith("-")):
-        words = words[1:]  # VAR=value prefixes
+def _strip_prefixes(words: list[str]) -> list[str]:
+    """Drop `VAR=x` assignments and wrapper commands (with their options)."""
+    i = 0
+    while i < len(words):
+        w = words[i]
+        if "=" in w and not w.startswith("-") and w.split("=", 1)[0].isidentifier():
+            i += 1
+        elif w.rsplit("/", 1)[-1] in WRAPPERS:
+            i += 1
+            while i < len(words) and words[i].startswith("-"):
+                i += 2 if words[i] in WRAPPER_OPTS_WITH_ARG else 1
+        else:
+            break
+    return words[i:]
+
+
+def git_call(words: list[str]) -> tuple[str | None, list[str], list[str]]:
+    """(subcommand, its args, git's global options) or (None, [], [])."""
+    words = _strip_prefixes(words)
     if not words or words[0].rsplit("/", 1)[-1] != "git":
-        return None, []
-    i = 1
+        return None, [], []
+    i, global_opts = 1, []
     while i < len(words):
         w = words[i]
         if w in GIT_OPTS_WITH_ARG:
+            global_opts += words[i : i + 2]
             i += 2
         elif w.startswith("-"):
+            global_opts.append(w)
             i += 1
         else:
-            return w, words[i + 1 :]
-    return None, []
+            return w, words[i + 1 :], global_opts
+    return None, [], global_opts
 
 
 def bulk_staging(sub: str | None, args: list[str]) -> str | None:
@@ -125,12 +188,35 @@ def bulk_staging(sub: str | None, args: list[str]) -> str | None:
     return None
 
 
+def skips_precommit(
+    sub: str | None, args: list[str], global_opts: list[str]
+) -> str | None:
+    """The pre-commit hook runs the secret scan; don't route around it (review finding)."""
+    msg = "The pre-commit hook runs the secret scan (V.17); commit without skipping it."
+    if "core.hookspath" in " ".join(global_opts).lower():
+        return msg
+    if sub == "commit":
+        for a in args:
+            if a == "--":
+                break
+            if a == "--no-verify":
+                return msg
+            if a.startswith("-") and not a.startswith("--"):
+                for ch in a[1:]:
+                    if ch in "mFCct":
+                        break
+                    if ch == "n":
+                        return msg
+    return None
+
+
 def check(payload: dict) -> str | None:
     tool = payload.get("tool_name", "")
     inp = payload.get("tool_input") or {}
     if tool == "Bash":
         for words in segments(str(inp.get("command", ""))):
-            reason = bulk_staging(*git_call(words))
+            sub, args, global_opts = git_call(words)
+            reason = bulk_staging(sub, args) or skips_precommit(sub, args, global_opts)
             if reason:
                 return reason
         return None

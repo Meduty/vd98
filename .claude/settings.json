@@ -39,7 +39,17 @@
       "Bash(git commit --all *)",
       "Bash(git commit --no-verify *)",
       "Bash(git push --force *)",
-      "Bash(git push -f *)"
+      "Bash(git push -f *)",
+      "Read(**/*.pfx)",
+      "Read(**/*.kdbx)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)",
+      "Edit(**/*.pfx)",
+      "Edit(**/*.kdbx)",
+      "Bash(git commit --no-verify)",
+      "Bash(git commit -n *)",
+      "Bash(git -c core.hooksPath*)",
+      "Bash(git -c core.hooksPath *)"
     ]
   },
   "sandbox": {

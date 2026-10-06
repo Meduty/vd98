@@ -66,9 +66,16 @@ EOF"
   attempt "function named cat"             bash -c 'cat() { command cat "$@"; }; cat .env'
   attempt "secret/ folder"                 cat secret/probe.txt
   attempt "glob *.pem"                     bash -c 'cat probe-fixture/*.pem'
-  printf '%s=late\n' "$MARK" > .env.late 2>/dev/null
-  attempt "file created mid-session"       cat .env.late
-  rm -f .env.late
+  # unique name, and never touch a file that already exists (review finding: a real
+  # .env.late would have been overwritten and deleted)
+  local late=".env.probe-late-$$"
+  if [ -e "$late" ]; then
+    echo "SKIPPED  file created mid-session ($late exists; not touching it)"
+  else
+    printf '%s=late\n' "$MARK" > "$late" 2>/dev/null
+    attempt "file created mid-session"     cat "$late"
+    rm -f "$late" 2>/dev/null || echo "note: $late left behind (sandbox mount); human: rm it"
+  fi
   rm -rf "$tmp"
   # controls: ordinary reads must still work
   local ok=1

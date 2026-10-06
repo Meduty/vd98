@@ -151,3 +151,36 @@ def test_hook_process_exit_0_when_allowed():
 
 def test_hook_process_survives_garbage_input():
     assert run_hook("not json").returncode == 0
+
+
+# PR #2 review round 1 (2026-10-06)
+@pytest.mark.parametrize(
+    "tool,inp",
+    [
+        ("Grep", {"pattern": "x", "path": "/repo", "glob": "*.p?x"}),
+        ("Grep", {"pattern": "x", "path": "/repo", "glob": "*.[pk]e[my]"}),
+        ("Glob", {"pattern": "**/*.kd?x"}),
+        ("Glob", {"pattern": "**/.env*"}),
+        ("Glob", {"pattern": "**/secr?t/*"}),
+    ],
+)
+def test_file_tool_globs_that_can_match_secrets_blocked(tool, inp):
+    """Finding 2: a masked extension glob slipped past the literal path check."""
+    assert guard.check({"tool_name": tool, "tool_input": inp}) is not None
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "env git add -A",
+        "sudo git add -A",
+        "nice -n 5 git commit -am x",
+        "git -c core.hooksPath=/tmp/empty commit -m x",
+        "git -c core.hooksPath /tmp/empty commit -m x",
+        "git commit --no-verify -m x",
+        "git commit -n -m x",
+    ],
+)
+def test_wrappers_and_hook_skips_nudged(cmd):
+    """Findings 4 and 6: wrappers hid bulk staging; hooksPath / --no-verify skip pre-commit."""
+    assert bash(cmd) is not None, cmd

@@ -32,7 +32,9 @@ CONTENT_RULES = {
     ),
     "Slack token": re.compile(rb"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"),
 }
-MAX_BYTES = 2_000_000  # skip huge blobs (fonts, media); names are still checked
+# Every blob is scanned in full: a size cut-off let a credential in a large file through
+# (review finding, PR #2). The regexes are anchored on short literal prefixes, so even
+# multi-MB files scan in milliseconds.
 
 
 def name_rule(path: str) -> str | None:
@@ -74,7 +76,7 @@ def files_and_blobs(staged: bool) -> list[tuple[str, bytes]]:
         path = raw.decode("utf-8", "surrogateescape")
         try:
             with open(path, "rb") as fh:
-                out.append((path, fh.read(MAX_BYTES + 1)))
+                out.append((path, fh.read()))
         except OSError:
             continue
     return out
@@ -86,8 +88,6 @@ def check(files: list[tuple[str, bytes]]) -> list[str]:
         rule = name_rule(path)
         if rule:
             problems.append(f"{path}: {rule}")
-            continue
-        if len(blob) > MAX_BYTES:
             continue
         for label, pattern in CONTENT_RULES.items():
             if pattern.search(blob):
