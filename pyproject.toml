@@ -1,7 +1,7 @@
 [project]
 name = "vd98"
 version = "0.1.0"
-description = "Add your description here"
+description = "Retro Windows 98-style desktop video downloader powered by yt-dlp"
 authors = [
     { name = "Meduty", email = "merlin@duty-knez.at" }
 ]

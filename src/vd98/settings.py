@@ -23,8 +23,9 @@ def defaults() -> dict:
     return {"download_dir": default_download_dir(), "preset": DEFAULT_PRESET, "sound": True}
 
 
-def _clean(data: dict) -> dict:
-    out = defaults()
+def _clean(data: dict, base: dict | None = None) -> dict:
+    """Keep valid values from data; fall back to base (or defaults) per key."""
+    out = dict(base) if base else defaults()
     if isinstance(data.get("download_dir"), str) and Path(data["download_dir"]).is_dir():
         out["download_dir"] = data["download_dir"]
     if data.get("preset") in PRESETS:
@@ -43,9 +44,9 @@ def load(path: Path | None = None) -> dict:
     return _clean(data) if isinstance(data, dict) else defaults()
 
 
-def save(settings: dict, path: Path | None = None) -> dict:
+def save(settings: dict, path: Path | None = None, base: dict | None = None) -> dict:
     path = path or config_path()
-    clean = _clean(settings)
+    clean = _clean(settings, base)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(clean, indent=2), encoding="utf-8")

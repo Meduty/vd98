@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Video Downloader 98</title>
+  <link rel="stylesheet" href="vendor/98.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="window app" id="app">
+    <div class="title-bar pywebview-drag-region">
+      <div class="title-bar-text">
+        <img src="icon.svg" alt="" class="title-icon" width="16" height="16">
+        Video Downloader 98
+      </div>
+      <div class="title-bar-controls">
+        <button aria-label="Minimize" id="btn-min"></button>
+        <button aria-label="Maximize" id="btn-max"></button>
+        <button aria-label="Close" id="btn-close"></button>
+      </div>
+    </div>
+
+    <nav class="menubar" id="menubar">
+      <div class="menu">
+        <button class="menu-title" data-menu="file"><u>F</u>ile</button>
+        <ul class="menu-list" id="menu-file">
+          <li data-action="open-folder">Open Download Folder</li>
+          <li data-action="browse">Change Folder...</li>
+          <li class="sep"></li>
+          <li data-action="exit"><span>E<u>x</u>it</span></li>
+        </ul>
+      </div>
+      <div class="menu">
+        <button class="menu-title" data-menu="edit"><u>E</u>dit</button>
+        <ul class="menu-list" id="menu-edit">
+          <li data-action="paste"><span>Paste URL</span><span class="kbd">Ctrl+Shift+V</span></li>
+          <li data-action="clear">Clear Finished</li>
+        </ul>
+      </div>
+      <div class="menu">
+        <button class="menu-title" data-menu="help"><u>H</u>elp</button>
+        <ul class="menu-list" id="menu-help">
+          <li data-action="about">About Video Downloader 98...</li>
+        </ul>
+      </div>
+    </nav>
+
+    <div class="window-body">
+      <fieldset>
+        <legend>Source</legend>
+        <div class="field-row-stacked">
+          <label for="url">Video URL:</label>
+          <div class="url-row">
+            <input id="url" type="text" placeholder="https://..." autocomplete="off" spellcheck="false">
+            <button id="add" class="default">Download</button>
+          </div>
+        </div>
+        <div class="field-row options-row">
+          <label for="preset">Format:</label>
+          <select id="preset"></select>
+          <label for="folder">Save to:</label>
+          <input id="folder" type="text" readonly>
+          <button id="browse">Browse...</button>
+        </div>
+      </fieldset>
+
+      <div class="sunken-panel queue" id="queue-panel">
+        <table class="interactive" id="queue">
+          <thead>
+            <tr>
+              <th class="col-title">Title</th>
+              <th class="col-status">Status</th>
+              <th class="col-progress">Progress</th>
+              <th class="col-speed">Speed</th>
+              <th class="col-eta">ETA</th>
+            </tr>
+          </thead>
+          <tbody id="queue-body"></tbody>
+        </table>
+        <div class="empty" id="empty">No downloads yet. Paste a link above and press Download.</div>
+      </div>
+
+      <div class="actions">
+        <button id="cancel" disabled>Cancel</button>
+        <button id="remove" disabled>Remove</button>
+        <button id="open">Open Folder</button>
+        <button id="clear">Clear Finished</button>
+        <span class="spacer"></span>
+        <input type="checkbox" id="sound">
+        <label for="sound">Sounds</label>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <p class="status-bar-field" id="status">Ready.</p>
+      <p class="status-bar-field" id="counts">0 queued</p>
+      <p class="status-bar-field" id="engine">yt-dlp</p>
+    </div>
+  </div>
+
+  <div class="backdrop" id="dialog" hidden>
+    <div class="window dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <div class="title-bar">
+        <div class="title-bar-text" id="dialog-title">Message</div>
+        <div class="title-bar-controls">
+          <button aria-label="Close" data-close></button>
+        </div>
+      </div>
+      <div class="window-body dialog-body">
+        <div class="dialog-icon" id="dialog-icon" aria-hidden="true"></div>
+        <div class="dialog-text" id="dialog-text"></div>
+      </div>
+      <div class="dialog-buttons">
+        <button data-close class="default" id="dialog-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="sounds.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
