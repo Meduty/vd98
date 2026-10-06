@@ -66,7 +66,7 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
 - V.11: `Api` methods return `{error}` / falsy instead of raising for bad input (docstring `src/vd98/api.py:4`).
   Guard: `tests/test_api.py::test_add_returns_error_dict_for_bad_url`, `::test_save_settings_rejects_garbage`. (Broken: B.4.)
 - V.12: No secrets in git: `.env*`, `*.pem`, `*.key`, `*.jks`, `*.keystore`, `secret/` untracked + gitignored.
-  Guard: `.claude/hooks/guard.py` PreToolUse hook + `.claude/settings.json` deny rules; `tests/test_guard.py`.
+  Guard: `.claude/hooks/guard.py` PreToolUse hook + `.claude/settings.json` deny rules; `tests/test_guard.py` (each new case shown failing against the previous guard). Best effort, word-level, not a sandbox (D.11).
 - V.13: Frozen paths C.11 exist at their path.
   Guard: `tests/test_layout.py::test_frozen_paths_exist`.
 - V.14: UI works offline: no `http(s)://` resource loads in `src/vd98/web/*.html|*.css` outside vendor.
@@ -80,7 +80,7 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
 | T.2 | manager + tests | `src/vd98/manager.py` | T.1 | M | done |
 | T.3 | api + window + web UI | `src/vd98/{api,app}.py`, `src/vd98/web/` | T.2 | L | done |
 | T.4 | CI, README, desktop entry, GH repo | `.github/`, `README.md`, `scripts/` | T.3 | S | done |
-| T.5 | Agentic repo prep (this setup) | `SPEC.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/`, `docs/` | T.4 | L | doing |
+| T.5 | Agentic repo prep (this setup) | `SPEC.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/`, `docs/` | T.4 | L | done |
 | T.6 | Format whole tree with `ruff format`, add format gate to CI | `src/`, `tests/`, `.github/workflows/ci.yml` | T.5 | S | done |
 | T.7 | Fix settings type robustness: B.1, B.4 | `src/vd98/settings.py`, `src/vd98/formats.py`, `src/vd98/api.py` | T.5 | S | todo |
 | T.8 | Fix manager races/gaps: B.2, B.3, B.5, B.6 | `src/vd98/manager.py` | T.5 | M | todo |
@@ -106,6 +106,10 @@ Found 2026-10-06 by T.5 research; each reproduced or read in code before recordi
 | B.8 | 2026-10-06 | Enter with empty URL: warning dialog opens and closes instantly | URL keydown calls `addUrl` → `showDialog`; same Enter bubbles to document handler → `hideDialog`, `src/vd98/web/app.js` `wire` | open → T.10 | unguarded |
 | B.9 | 2026-10-06 | Double-click finished row likely does not open folder; opens current `download_dir` not job folder | click handler re-renders rows before dblclick lands; handler ignores `job.dest_dir`, `src/vd98/web/app.js` `wire` | open → T.10 | unguarded |
 | B.10 | 2026-10-06 | UI dead if `init`/`about` rejects at startup | `start` awaits without try; `wire()` never runs, `src/vd98/web/app.js` `start` | open → T.10 | unguarded |
+| B.11 | 2026-10-06 | `git status` + newline + `git add -A` passed the guard (Codex review) | `shlex` treats `\n` as whitespace, so commands on separate lines formed one segment and the `status` exemption returned early, `.claude/hooks/guard.py` `split_segments` | fixed T.5: newline is punctuation, not whitespace; quoted newlines stay inside the word | V.12 |
+| B.12 | 2026-10-06 | Guard blocked prose: heredoc text containing the bare word "secret" (agent's own edit script) | every word checked as a path; bare `secret` matched `SECRET_DIRS`, `.claude/hooks/guard.py` `is_secret_path` | fixed T.5: `secret`/`secrets` dirs match only in path form (contains `/`) | V.12 |
+| B.13 | 2026-10-06 | `cat .envrc`, `cat .env_prod`, `python3 -c 'open(".env")'` passed the guard (Codex review) | `.env` matched only exact or `.env.` prefix; inline interpreter code was one opaque word, `.claude/hooks/guard.py` `is_secret_path` / `check_segment` | fixed T.5: `.env*` prefix; code after `-c`/`-e`/`--eval` scanned for path tokens; `.gitignore` → `.env*` | V.12 |
+| B.14 | 2026-10-06 | CSS `@import "https://…"` passed the offline-UI guard (Codex review) | regex covered `src=`/`href=`/`url(` only, `tests/test_layout.py` `test_ui_has_no_remote_assets` | fixed T.5: also `@import "…"`, `fetch(`/`import(` with http(s) | V.14 |
 
 ## §D Deferred / design questions
 
@@ -119,3 +123,4 @@ Found 2026-10-06 by T.5 research; each reproduced or read in code before recordi
 - D.8: Vendored MS Sans Serif webfonts ship inside 98.css package (MIT); no separate font attribution in README. Add credit line? Open.
 - D.9: README says settings in `~/.config/video-downloader-98/`; code honours `$XDG_CONFIG_HOME`. Reword README? Open.
 - D.10: Each `DownloadManager` leaks a daemon worker (tests create many). No `shutdown()`. Open.
+- D.11: `.claude/hooks/guard.py` inspects words, not effects: a command reaching a secret without naming it (`grep -R TOKEN .`, a script file that opens one) passes. Options: accept (repo has no secrets, C.6) · enable Claude Code OS sandbox. Recommendation: accept for now (guard + deny rules stop accidents; a block means stop and ask); enable sandbox if a secret is ever added. Open (user decision).

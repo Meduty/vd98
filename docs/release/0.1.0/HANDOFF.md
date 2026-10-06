@@ -11,9 +11,10 @@
 
 ## Open
 
-- Bugs B.1–B.10 → tasks T.7–T.11 (SPEC §B, §T). Pinned by strict xfails in `tests/test_known_bugs.py` where testable.
+- Bugs B.1–B.10 → tasks T.7–T.11 (SPEC §B, §T). Strict xfails in `tests/test_known_bugs.py` pin B.1, B.4, B.5, B.7 only. B.2, B.3, B.6 (manager) have no xfail yet — add them first in T.8. B.8–B.10 (UI JS) have no automated test harness.
+- B.11–B.14 (guard / offline-UI holes from Codex review) fixed in T.5.
 - Installer hardening T.12, CI pinning T.13.
-- Design questions D.1–D.10.
+- Design questions D.1–D.11 (D.11: guard is word-level, sandbox decision pending).
 
 ## How to resume
 

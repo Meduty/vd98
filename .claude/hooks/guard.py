@@ -8,6 +8,16 @@ Blocks, deterministically:
     *.p12, *.pfx, *.jks, *.keystore, *.kdbx, id_rsa/id_ed25519/id_ecdsa,
     secret/ or secrets/ dirs).
 
+Matching is on path *form*: `secret/x` or `./secrets` matches, the plain word
+"secret" in prose does not. Newlines separate commands (as in sh) but quoted
+text stays one word, so multi-line commit messages are not split apart.
+Inline interpreter code (python -c, node -e, perl -e, ruby -e) is scanned for
+secret-looking path tokens too.
+
+Known limit (SPEC D.11): this inspects words, not effects. A command that
+reaches a secret without naming it (e.g. `grep -R TOKEN .`) is not blocked.
+The guard stops accidents; it is not a sandbox.
+
 Metadata-only git commands (rm --cached, ls-files, check-ignore) may name
 secret paths. History reads are not blocked: no secret was ever committed
 (SPEC §B has no secret entry); add them here if that changes.
@@ -18,17 +28,22 @@ tests/test_guard.py keeps the parser honest.
 """
 
 import json
+import re
 import shlex
 import sys
+from itertools import pairwise
 
 SECRET_EXTS = (".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".kdbx")
 SECRET_DIRS = {"secret", "secrets"}
 SSH_KEYS = ("id_rsa", "id_ed25519", "id_ecdsa", "id_dsa")
 ENV_ALLOWED = {".env.example", ".env.sample", ".env.template"}
 
-SEPARATORS = {";", "&", "&&", "|", "||", "|&", "(", ")", "\n"}
+SEPARATOR_CHARS = set(";&|()\n")  # a token made only of these splits commands
 WRAPPERS = {"sudo", "env", "command", "nohup", "time", "exec", "xargs", "nice"}
 SHELLS = {"bash", "sh", "zsh", "dash"}
+INTERPRETERS = ("python", "node", "perl", "ruby", "deno")
+INLINE_CODE_FLAGS = {"-c", "-e", "--eval"}
+CODE_TOKEN = re.compile(r"""[^\s'"(),;`{}\[\]+]+""")
 GIT_OPTS_WITH_ARG = {
     "-C",
     "-c",
@@ -42,20 +57,22 @@ BULK_ADD_PATHSPECS = {".", ":/", ":", "*", "./"}
 
 
 def is_secret_path(word: str) -> bool:
-    path = word.strip().strip("'\"").rstrip("/")
+    raw = word.strip().strip("'\"").replace("\\", "/")
+    path = raw.rstrip("/")
     if not path:
         return False
-    parts = [p for p in path.replace("\\", "/").split("/") if p not in ("", ".")]
+    parts = [p for p in path.split("/") if p not in ("", ".")]
     if not parts:
         return False
-    if any(p in SECRET_DIRS for p in parts):
+    # secret/ dirs only in path form; the bare word is ordinary prose.
+    if "/" in raw and any(p in SECRET_DIRS for p in parts):
         return True
     base = parts[-1]
     if "=" in base:  # --include=*.key style flags
         base = base.split("=", 1)[1]
     if base in ENV_ALLOWED:
         return False
-    if base == ".env" or base.startswith(".env."):
+    if base.startswith(".env"):  # .env, .env.local, .envrc, .env_prod
         return True
     if base.endswith(SECRET_EXTS):
         return True
@@ -63,16 +80,19 @@ def is_secret_path(word: str) -> bool:
 
 
 def split_segments(command: str) -> list[list[str]]:
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()<>")
+    # Newline separates commands in sh, so it must not count as whitespace;
+    # inside quotes shlex keeps it as part of the word.
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()<>\n")
+    lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
         tokens = list(lexer)
     except ValueError:  # unbalanced quotes: best effort
-        tokens = command.split()
+        tokens = command.replace("\n", " ; ").split()
     segments, current = [], []
     for tok in tokens:
-        if tok in SEPARATORS:
+        if tok and set(tok) <= SEPARATOR_CHARS:
             if current:
                 segments.append(current)
             current = []
@@ -146,6 +166,13 @@ def check_segment(words: list[str]) -> str | None:
         idx = words.index("-c")
         if idx + 1 < len(words):
             return check_bash(words[idx + 1])
+
+    if cmd.startswith(INTERPRETERS):
+        for flag, code in pairwise(words):
+            if flag in INLINE_CODE_FLAGS:
+                for tok in CODE_TOKEN.findall(code):
+                    if is_secret_path(tok):
+                        return f"Inline code touches a secret-looking path ({tok!r}) (SPEC V.12)."
 
     if cmd == "git":
         sub, args = git_subcommand(words)

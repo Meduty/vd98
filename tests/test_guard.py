@@ -50,6 +50,19 @@ def bash(cmd):
         "base64 id_rsa",
         "git add secrets/token.txt",
         "grep -r foo --include=*.key .",
+        # Codex review 2026-10-06: newline-separated commands
+        "git status\ngit add -A",
+        "true\ngit commit -am x",
+        "uv run pytest -q\n\ngit add .",
+        # Codex review 2026-10-06: .env prefix variants
+        "cat .envrc",
+        "cat config/.env_prod",
+        # Codex review 2026-10-06: inline interpreter code
+        "python3 -c 'print(open(\".env\").read())'",
+        'node -e \'require("fs").readFileSync("secret/x")\'',
+        # secret dirs still blocked in path form
+        "ls secrets/",
+        "ls ./secret",
     ],
 )
 def test_blocks(cmd):
@@ -61,6 +74,12 @@ def test_blocks(cmd):
     [
         "git add -- SPEC.md src/vd98/manager.py",
         "git add src/vd98/web/app.js",
+        # prose mentioning the word is not a path (8/12 past blocks were prose)
+        "git commit -m 'keep the secret out of git'",
+        "echo 'reaches a secret without naming it'",
+        "python3 - <<'EOF'\nprint('secrets are never read')\nEOF",
+        "cat > notes.md <<'EOF'\nreaches a secret without naming it\nEOF",
+        "git commit -F - <<'EOF'\nkeep secrets out\nEOF",
         "git commit -m 'add -A flag docs'",
         "git commit -m 'all good' --amend",
         "git commit --author='A <a@b>' -m x",
@@ -76,6 +95,9 @@ def test_blocks(cmd):
         "cat id_rsa.pub",
         "echo 'keys are in the vault'",
         "grep -n monkey src/",
+        "git commit -m 'line one\nline two'",
+        "git status\ngit diff --stat",
+        "python3 -c 'print(1)'",
     ],
 )
 def test_allows(cmd):

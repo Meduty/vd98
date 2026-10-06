@@ -20,6 +20,11 @@ def test_frozen_paths_exist():
 
 def test_ui_has_no_remote_assets():
     """SPEC V.14: the UI loads nothing over the network."""
-    remote = re.compile(r"""(src|href)\s*=\s*["']https?://|url\(\s*["']?https?://""")
+    remote = re.compile(
+        r"""(src|href)\s*=\s*["']https?://"""
+        r"""|url\(\s*["']?https?://"""
+        r"""|@import\s+["']https?://"""
+        r"""|\b(fetch|import)\(\s*["']https?://"""
+    )
     for path in [*WEB.glob("*.html"), *WEB.glob("*.css"), *WEB.glob("*.js")]:
         assert not remote.search(path.read_text()), f"remote asset in {path.name}"

@@ -7,9 +7,10 @@ dist/
 build/
 
 # Secrets never enter git (SPEC V.12)
-.env
-.env.*
+.env*
 !.env.example
+!.env.sample
+!.env.template
 *.pem
 *.key
 *.p12
