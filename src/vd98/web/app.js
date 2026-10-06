@@ -236,16 +236,34 @@
   function wire() {
     wireMenus();
 
-    // Title bar buttons sit inside the drag region; keep mousedown from starting a drag.
-    document.querySelectorAll(".title-bar-controls button").forEach((b) =>
-      b.addEventListener("mousedown", (e) => e.stopPropagation()),
-    );
-    $("btn-min").onclick = () => api.minimize();
-    $("btn-max").onclick = () => {
+    // Frameless window: dragging the title bar and the edge handles hands the gesture to the
+    // window manager (api.start_move / start_resize); pywebview's own drag can't move a
+    // window on Wayland. Must start while the button is still down, so on mousedown.
+    const onControl = (e) => e.target.closest(".title-bar-controls");
+    const toggleMaximize = () => {
       maximized = !maximized;
       $("btn-max").setAttribute("aria-label", maximized ? "Restore" : "Maximize");
+      document.body.classList.toggle("maximized", maximized);
       api.maximize(maximized);
     };
+    $("titlebar").addEventListener("mousedown", (e) => {
+      if (e.button !== 0 || onControl(e) || e.detail > 1) return;
+      e.preventDefault();
+      closeMenus();
+      api.start_move();
+    });
+    $("titlebar").addEventListener("dblclick", (e) => {
+      if (!onControl(e)) toggleMaximize();
+    });
+    document.querySelectorAll(".rs").forEach((handle) =>
+      handle.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        api.start_resize(handle.dataset.edge);
+      }),
+    );
+    $("btn-min").onclick = () => api.minimize();
+    $("btn-max").onclick = toggleMaximize;
     $("btn-close").onclick = () => api.close();
 
     $("add").onclick = addUrl;

@@ -28,6 +28,13 @@ Mock data lives in `MOCK_API` in `scripts/ui_snapshot.py`; extend it when the
 Not covered offscreen: window drag, minimize/maximize/close, folder dialog,
 sounds. If touched, launch `uv run vd98` and ask the user to click through.
 
+Window chrome checklist (SPEC V.15; the live window can't be captured or driven on Wayland):
+1. Press and hold on the blue title bar, move the mouse: the window follows.
+2. Drag each edge and corner (cursor changes on the outer few pixels): the window resizes.
+3. Double-click the title bar: maximizes; again: restores. Resize handles are off while maximized.
+4. Title-bar buttons still minimize / maximize / close; clicking them doesn't start a drag.
+`tests/test_chrome.py` covers the thread hand-off and edge names, not the compositor.
+
 ## Download path change → real smoke
 
 Short, freely available test video ("Me at the zoo", 19 s):

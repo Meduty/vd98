@@ -40,6 +40,7 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
 - I.10: `save_settings(patch) -> settings | {error}`; `choose_folder() -> settings | None`.
 - I.11: `open_folder(path=None) -> bool` — `xdg-open` on dir (file → parent).
 - I.12: `minimize()`, `maximize(on)`, `close()` (cancels all jobs, destroys window); `about() -> {app, yt_dlp}`.
+- I.13: `start_move() -> bool`, `start_resize(edge) -> bool` (`edge` ∈ `n s e w ne nw se sw`) — hand a title-bar drag / edge drag to the window manager via `WindowChrome` (`src/vd98/chrome.py`); False when no window or unknown edge. Callers: `#titlebar` and `.rs` handle `mousedown` in `src/vd98/web/app.js` `wire`.
 
 ## §V Invariants
 
@@ -71,6 +72,8 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
   Guard: `tests/test_layout.py::test_frozen_paths_exist`.
 - V.14: UI works offline: no `http(s)://` resource loads in `src/vd98/web/*.html|*.css` outside vendor.
   Guard: `tests/test_layout.py::test_ui_has_no_remote_assets`.
+- V.15: Frameless window moves and resizes through the window manager (`QWindow.startSystemMove` / `startSystemResize`), never `QWidget.move`; the Qt calls run on the GUI thread; every `data-edge` handle in `index.html` maps to a known edge.
+  Guard: `tests/test_chrome.py::test_requests_from_worker_thread_run_on_gui_thread`, `::test_edge_names_match_ui_handles`, `::test_edges_for_known_names`. Real drag on Wayland: manual (`docs/live/e2e_testing.md`).
 
 ## §T Tasks
 
@@ -112,6 +115,7 @@ Found 2026-10-06 by T.5 research; each reproduced or read in code before recordi
 | B.14 | 2026-10-06 | CSS `@import "https://…"` passed the offline-UI guard (Codex review) | regex covered `src=`/`href=`/`url(` only, `tests/test_layout.py` `test_ui_has_no_remote_assets` | fixed T.5: also `@import "…"`, `fetch(`/`import(` with http(s) | V.14 |
 | B.15 | 2026-10-06 | `python3 - <<'EOF'` with a body opening `.env` passed the guard; data heredocs naming `secret/` in path form (reviewer prompts, `git commit -F -` bodies) were blocked | each heredoc body line became its own segment and its first word was never checked; data and code heredocs were not told apart, `.claude/hooks/guard.py` `check_bash` | fixed T.5: quoted heredoc fed to `cat`/`tee`/`git commit -F -` → body dropped (`strip_data_heredocs`); every other heredoc body scanned as code (`heredoc_bodies`). Same rules ported upstream to the agentic-repo-prep guide template | V.12 |
 | B.17 | 2026-10-06 | Body of `cat > /tmp/run.sh <<'EOF'` dropped as data although the same command then ran the file (`sh /tmp/run.sh`), hiding a secret read (found by Codex reviewing the upstream port) | data-sink test looked only at the heredoc's own line, `.claude/hooks/guard.py` `strip_data_heredocs` | fixed T.5: body dropped only if nothing follows the heredoc and no earlier text names the written file; a file run by a later tool call stays out of scope (D.11) | V.12 |
+| B.16 | 2026-10-06 | User report: window can't be dragged by the title bar; edges can't be resized (KDE/GNOME Wayland) | pywebview's drag-region JS calls `QWidget.move()`, which Wayland ignores (clients can't position windows); frameless window has no compositor borders to resize; `src/vd98/web/index.html` `pywebview-drag-region`, `src/vd98/app.py` `frameless=True` | fixed T.5: title-bar `mousedown` → `Api.start_move` → `QWindow.startSystemMove()`; 8 edge handles → `start_resize` → `startSystemResize(edges)`, dispatched to the GUI thread (`src/vd98/chrome.py` `WindowChrome`); double-click title bar toggles maximize | V.15 |
 
 ## §D Deferred / design questions
 
@@ -120,7 +124,7 @@ Found 2026-10-06 by T.5 research; each reproduced or read in code before recordi
 - D.3: Concurrent errors → each dialog replaces previous; only last shown. Queue dialogs? Open.
 - D.4: SHA-pin GitHub Actions vs tag-pin. Private repo, low risk. Open (T.13).
 - D.5: V.1 checks submitted URL only; yt-dlp redirects + localhost/private IPs allowed. Local app, user-driven → accept? Open.
-- D.6: Maximize state tracked in JS only (`src/vd98/web/app.js` `maximized`); desyncs if WM maximizes. Open.
+- D.6: Maximize state tracked in JS only (`src/vd98/web/app.js` `maximized`); desyncs if WM maximizes (now also reachable by dragging to a screen edge, V.15). Open.
 - D.7: `cancel_all` runs twice on exit (`Api.close` + `window.events.closing`, `src/vd98/app.py`). Idempotent, harmless. Open.
 - D.8: Vendored MS Sans Serif webfonts ship inside 98.css package (MIT); no separate font attribution in README. Add credit line? Open.
 - D.9: README says settings in `~/.config/video-downloader-98/`; code honours `$XDG_CONFIG_HOME`. Reword README? Open.

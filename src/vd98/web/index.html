@@ -7,8 +7,18 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
+  <!-- Frameless window: these edges start a compositor resize (see src/vd98/chrome.py). -->
+  <div class="rs rs-n" data-edge="n"></div>
+  <div class="rs rs-s" data-edge="s"></div>
+  <div class="rs rs-e" data-edge="e"></div>
+  <div class="rs rs-w" data-edge="w"></div>
+  <div class="rs rs-ne" data-edge="ne"></div>
+  <div class="rs rs-nw" data-edge="nw"></div>
+  <div class="rs rs-se" data-edge="se"></div>
+  <div class="rs rs-sw" data-edge="sw"></div>
+
   <div class="window app" id="app">
-    <div class="title-bar pywebview-drag-region">
+    <div class="title-bar" id="titlebar">
       <div class="title-bar-text">
         <img src="icon.svg" alt="" class="title-icon" width="16" height="16">
         Video Downloader 98

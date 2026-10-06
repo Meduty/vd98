@@ -6,6 +6,7 @@ Every method returns plain JSON-able data; errors come back as {"error": msg}.
 
 import shutil
 import subprocess
+import threading
 from importlib.metadata import version
 from pathlib import Path
 
@@ -24,6 +25,8 @@ class Api:
         self._settings_path = settings_path
         self._settings = settings_mod.load(settings_path)
         self._window = None
+        self._chrome = None
+        self._chrome_lock = threading.Lock()
 
     def _attach(self, window) -> None:
         self._window = window
@@ -91,6 +94,26 @@ class Api:
         return True
 
     # -- window chrome (custom 98.css title bar) --------------------------
+    def _window_chrome(self):
+        """Lazily create the GUI-thread move/resize bridge once the Qt window exists."""
+        native = getattr(self._window, "native", None)
+        if native is None:
+            return None
+        with self._chrome_lock:
+            if self._chrome is None:
+                from .chrome import WindowChrome  # Qt import only when a window exists
+
+                self._chrome = WindowChrome(native)
+        return self._chrome
+
+    def start_move(self):
+        chrome = self._window_chrome()
+        return bool(chrome and chrome.request_move())
+
+    def start_resize(self, edge):
+        chrome = self._window_chrome()
+        return bool(chrome and chrome.request_resize(edge))
+
     def minimize(self):
         if self._window:
             self._window.minimize()

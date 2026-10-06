@@ -35,6 +35,7 @@ window.pywebview = {api: {
   add: async () => ({error: 'mock'}), cancel: async () => true, remove: async () => true,
   clear_finished: async () => true, open_folder: async () => true, choose_folder: async () => null,
   minimize: async () => {}, maximize: async () => {}, close: async () => {},
+  start_move: async () => true, start_resize: async () => true,
 }};
 """
 

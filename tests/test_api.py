@@ -62,3 +62,28 @@ def test_init_lists_presets(tmp_path):
 def test_about_versions(tmp_path):
     info = make_api(tmp_path).about()
     assert info["app"] and info["yt_dlp"]
+
+
+def test_window_chrome_calls_are_safe_without_window(tmp_path):
+    """SPEC V.11: no window yet (tests, startup) -> False, never an exception."""
+    api = make_api(tmp_path)
+    assert api.start_move() is False
+    assert api.start_resize("se") is False
+    assert api.start_resize("bogus") is False
+
+
+def test_start_resize_rejects_unknown_edge_with_window(tmp_path):
+    from qtpy import QtCore
+
+    class Native(QtCore.QObject):
+        def windowHandle(self):
+            return None
+
+    class Win:
+        native = Native()
+
+    api = make_api(tmp_path)
+    api._attach(Win())
+    assert api.start_resize("bogus") is False
+    assert api.start_resize("se") is True
+    assert api.start_move() is True

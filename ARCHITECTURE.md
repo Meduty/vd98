@@ -48,6 +48,7 @@ Plain-data methods JS can call. Holds manager, settings, window ref (underscored
 |---|---|
 | Console script `vd98` | `pyproject.toml` `[project.scripts]` → `src/vd98/__init__.py` `main` |
 | Window creation (frameless, Qt) | `src/vd98/app.py:12` `run` |
+| Move / resize via window manager (Wayland-safe), GUI-thread dispatch | `src/vd98/chrome.py` `WindowChrome`, `edges_for`; bridge `Api.start_move` / `start_resize` |
 
 ### 4. UI: `src/vd98/web/`
 
@@ -83,6 +84,7 @@ Plain-data methods JS can call. Holds manager, settings, window ref (underscored
 | Add a menu item | `src/vd98/web/index.html` `.menu-list` `<li data-action>` + `app.js` `ACTIONS` |
 | Change a sound | `src/vd98/web/sounds.js` |
 | Change window size/flags | `src/vd98/app.py` `run` |
+| Change how drag/resize works | `src/vd98/chrome.py`; handles `.rs` in `src/vd98/web/index.html` + `app.css`; wiring in `app.js` `wire` |
 | Change CI gates | `.github/workflows/ci.yml` |
 | Install launcher | `scripts/install-desktop.sh`, `packaging/vd98.desktop` |
 
