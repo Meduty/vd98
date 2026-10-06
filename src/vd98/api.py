@@ -17,7 +17,9 @@ from .manager import DownloadManager
 
 
 class Api:
-    def __init__(self, manager: DownloadManager | None = None, settings_path: Path | None = None):
+    def __init__(
+        self, manager: DownloadManager | None = None, settings_path: Path | None = None
+    ):
         self._manager = manager or DownloadManager()
         self._settings_path = settings_path
         self._settings = settings_mod.load(settings_path)
@@ -50,13 +52,19 @@ class Api:
         return {"jobs": self._manager.jobs(), "settings": dict(self._settings)}
 
     def init(self):
-        return {**self.get_state(), "presets": preset_list(), "ffmpeg": bool(shutil.which("ffmpeg"))}
+        return {
+            **self.get_state(),
+            "presets": preset_list(),
+            "ffmpeg": bool(shutil.which("ffmpeg")),
+        }
 
     # -- settings ---------------------------------------------------------
     def save_settings(self, patch):
         if not isinstance(patch, dict):
             return {"error": "Invalid settings."}
-        self._settings = settings_mod.save(patch, self._settings_path, base=self._settings)
+        self._settings = settings_mod.save(
+            patch, self._settings_path, base=self._settings
+        )
         return dict(self._settings)
 
     def choose_folder(self):
@@ -75,7 +83,11 @@ class Api:
             target = target.parent
         if not target.is_dir() or not shutil.which("xdg-open"):
             return False
-        subprocess.Popen(["xdg-open", str(target)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(
+            ["xdg-open", str(target)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         return True
 
     # -- window chrome (custom 98.css title bar) --------------------------

@@ -36,7 +36,11 @@ class Job:
     _tmpfiles: set = field(default_factory=set, repr=False)
 
     def public(self) -> dict:
-        return {f.name: getattr(self, f.name) for f in fields(self) if not f.name.startswith("_")}
+        return {
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if not f.name.startswith("_")
+        }
 
 
 class _QuietLogger:
@@ -168,9 +172,13 @@ class DownloadManager:
             self._cleanup_partials(job)
             self._update(job, status="cancelled", speed=None, eta=None)
         except DownloadError as exc:
-            self._update(job, status="error", error=clean_error(exc), speed=None, eta=None)
+            self._update(
+                job, status="error", error=clean_error(exc), speed=None, eta=None
+            )
         except Exception as exc:  # noqa: BLE001 — surface anything to the UI
-            self._update(job, status="error", error=clean_error(exc), speed=None, eta=None)
+            self._update(
+                job, status="error", error=clean_error(exc), speed=None, eta=None
+            )
 
     def _on_hook(self, job: Job, d: dict) -> None:
         if job._cancel.is_set():
@@ -186,9 +194,13 @@ class DownloadManager:
         if d.get("status") == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate")
             if total:
-                changes["percent"] = round(100.0 * d.get("downloaded_bytes", 0) / total, 1)
+                changes["percent"] = round(
+                    100.0 * d.get("downloaded_bytes", 0) / total, 1
+                )
             elif d.get("fragment_count"):
-                changes["percent"] = round(100.0 * d.get("fragment_index", 0) / d["fragment_count"], 1)
+                changes["percent"] = round(
+                    100.0 * d.get("fragment_index", 0) / d["fragment_count"], 1
+                )
             changes["speed"] = d.get("speed")
             changes["eta"] = d.get("eta")
         elif d.get("status") == "finished":
@@ -205,7 +217,9 @@ class DownloadManager:
                 # Terminal state is final; only a queued->cancelled race lands here.
                 return
             for k, v in changes.items():
-                setattr(job, k, min(v, 100.0) if k == "percent" and v is not None else v)
+                setattr(
+                    job, k, min(v, 100.0) if k == "percent" and v is not None else v
+                )
             snapshot = job.public()
         if self.on_progress:
             self.on_progress(snapshot)
@@ -221,7 +235,11 @@ class DownloadManager:
                 path = dest / path
             try:
                 path = path.resolve()
-                if path.is_relative_to(dest) and path.is_file() and path.name.endswith((".part", ".ytdl")):
+                if (
+                    path.is_relative_to(dest)
+                    and path.is_file()
+                    and path.name.endswith((".part", ".ytdl"))
+                ):
                     os.remove(path)
             except OSError:
                 pass

@@ -18,8 +18,17 @@ def test_accepts_http_urls(raw, expected):
 
 @pytest.mark.parametrize(
     "raw",
-    ["", "   ", "file:///etc/passwd", "ftp://host/x", "javascript:alert(1)://x",
-     "https://", "https://exa mple.com", "https://x.com/" + "a" * 5000, None],
+    [
+        "",
+        "   ",
+        "file:///etc/passwd",
+        "ftp://host/x",
+        "javascript:alert(1)://x",
+        "https://",
+        "https://exa mple.com",
+        "https://x.com/" + "a" * 5000,
+        None,
+    ],
 )
 def test_rejects_bad_urls(raw):
     with pytest.raises(InvalidURL):

@@ -20,13 +20,20 @@ def default_download_dir() -> str:
 
 
 def defaults() -> dict:
-    return {"download_dir": default_download_dir(), "preset": DEFAULT_PRESET, "sound": True}
+    return {
+        "download_dir": default_download_dir(),
+        "preset": DEFAULT_PRESET,
+        "sound": True,
+    }
 
 
 def _clean(data: dict, base: dict | None = None) -> dict:
     """Keep valid values from data; fall back to base (or defaults) per key."""
     out = dict(base) if base else defaults()
-    if isinstance(data.get("download_dir"), str) and Path(data["download_dir"]).is_dir():
+    if (
+        isinstance(data.get("download_dir"), str)
+        and Path(data["download_dir"]).is_dir()
+    ):
         out["download_dir"] = data["download_dir"]
     if data.get("preset") in PRESETS:
         out["preset"] = data["preset"]

@@ -22,7 +22,11 @@ def _audio(codec: str) -> dict:
     return {
         "format": "ba/b",
         "postprocessors": [
-            {"key": "FFmpegExtractAudio", "preferredcodec": codec, "preferredquality": "192"}
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": codec,
+                "preferredquality": "192",
+            }
         ],
     }
 
