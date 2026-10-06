@@ -22,7 +22,7 @@ Owns jobs, one worker thread, yt-dlp calls, cancel, partial cleanup. No GUI impo
 | Job record + public dict | `src/vd98/manager.py:26` `Job`, `Job.public` |
 | Queue, worker, state machine | `src/vd98/manager.py:88` `DownloadManager`, `_worker` :233, `_run` :257 |
 | Progress → percent/speed/eta | `src/vd98/manager.py:298` `_on_hook`; post-processing `_on_pp_hook` :342 |
-| Thread-safe state writes, terminal guard | `src/vd98/manager.py:334` `_update` |
+| Thread-safe state writes, terminal guard | `src/vd98/manager.py:346` `_update` |
 | Cancel + `.part` cleanup | `cancel` :124, `_cleanup_partials` :378 |
 | yt-dlp error → short message | `src/vd98/manager.py:82` `clean_error` |
 | URL validation | `src/vd98/urls.py:12` `normalize_url` |

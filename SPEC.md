@@ -108,7 +108,7 @@ JS bridge `Api` (`src/vd98/api.py:19`, exposed as `window.pywebview.api`; JS cal
 | T.11 | URL hardening: B.7 | `src/vd98/urls.py` | T.5 | S | todo |
 | T.12 | install-desktop.sh: escape sed replacement, add uninstall, ffmpeg check | `scripts/install-desktop.sh` | T.5 | S | todo |
 | T.13 | CI pinning: pin uv version; consider SHA-pinned actions (D.4) | `.github/workflows/ci.yml` | T.6 | S | todo |
-| T.14 | Effect-level secret protection: sandbox denyRead, staged-content scan (pre-commit + CI), deny rules, guard shrunk to nudge + file-tool paths, sandbox probe | `.claude/settings.json`, `.claude/hooks/guard.py`, `scripts/check_secrets.py`, `scripts/sandbox_probe.sh`, `.githooks/pre-commit`, `.github/workflows/ci.yml` | T.5 | L | doing |
+| T.14 | Effect-level secret protection: sandbox denyRead, staged-content scan (pre-commit + CI), deny rules, guard shrunk to nudge + file-tool paths, sandbox probe | `.claude/settings.json`, `.claude/hooks/guard.py`, `scripts/check_secrets.py`, `scripts/sandbox_probe.sh`, `.githooks/pre-commit`, `.github/workflows/ci.yml` | T.5 | L | done |
 | T.15 | `%` and `Size` columns (size `~` when estimated) | `src/vd98/manager.py`, `src/vd98/web/{index.html,app.js,app.css}` | T.3 | S | done |
 | T.16 | Smoothed ETA over the most recent half of the download (V.22) | `src/vd98/eta.py`, `src/vd98/manager.py` | T.3 | S | done |
 | T.17 | Resume downloads after an accidental close: persisted queue, close = suspend keeping partials, restore as paused, Resume / Resume All (V.20, V.21) | `src/vd98/queue_store.py`, `src/vd98/manager.py`, `src/vd98/api.py`, `src/vd98/app.py`, `src/vd98/web/` | T.3 | M | done |
