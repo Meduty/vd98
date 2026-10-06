@@ -14,13 +14,14 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 MARK="PROBE_MARKER_""7f3a"   # split so this file never contains the marker itself
-FIXTURES=(".env" "secret/probe.txt" "probe-fixture/server.pem")
+FIXTURES=(".env" "secret/probe.txt" "probe-fixture/server.pem"
+          "probe-fixture/config/secrets/token.txt" "probe-fixture/config/.envrc")
 
 setup() {
   if [ -e .env ] && ! grep -q "$MARK" .env 2>/dev/null; then
     echo "refusing: .env exists and is not a probe fixture (a real one?)" >&2; exit 2
   fi
-  mkdir -p secret probe-fixture
+  mkdir -p secret probe-fixture/config/secrets
   for f in "${FIXTURES[@]}"; do printf '%s=fake\n' "$MARK" > "$f"; done
   for f in "${FIXTURES[@]}"; do
     git check-ignore -q "$f" || { echo "NOT gitignored: $f (fix .gitignore first)" >&2; exit 2; }
@@ -30,7 +31,7 @@ setup() {
 
 cleanup() {
   for f in "${FIXTURES[@]}"; do grep -q "$MARK" "$f" 2>/dev/null && rm -f "$f"; done
-  rmdir secret probe-fixture 2>/dev/null || true
+  rmdir probe-fixture/config/secrets probe-fixture/config secret probe-fixture 2>/dev/null || true
   echo "fixtures removed"
 }
 
@@ -66,6 +67,10 @@ EOF"
   attempt "function named cat"             bash -c 'cat() { command cat "$@"; }; cat .env'
   attempt "secret/ folder"                 cat secret/probe.txt
   attempt "glob *.pem"                     bash -c 'cat probe-fixture/*.pem'
+  # nested secret dirs / env files (PR #3 review round 1, finding 5)
+  attempt "nested secrets/ via python"     python3 -c "print(open('probe-fixture/config/secrets/token.txt').read())"
+  attempt "nested secrets/ via glob"       bash -c 'cat probe-fixture/config/secrets/*'
+  attempt "nested .envrc"                  cat probe-fixture/config/.envrc
   # unique name, and never touch a file that already exists (review finding: a real
   # .env.late would have been overwritten and deleted)
   local late=".env.probe-late-$$"
