@@ -13,4 +13,4 @@
 9. §B row: date · symptom · cause · fix · guarding §V. Fix may be `open → T.n`.
 10. §D: question + options + decision. Resolved inline (`**Decided 2026-10-06:** …`), never deleted.
 11. Dates absolute, ISO `YYYY-MM-DD`.
-12. SPEC changes only via the `spec` skill (`.claude/skills/spec/SKILL.md`).
+12. SPEC changes only via the `repo-spec` skill (`.claude/skills/repo-spec/SKILL.md`).

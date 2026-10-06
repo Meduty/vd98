@@ -19,26 +19,73 @@ Twitch VODs, Reddit, X, news sites, direct `.mp4` / HLS links and
 Single videos only: playlist URLs download just the linked video.
 DRM-protected services (Netflix, Disney+, Spotify, ...) are not supported.
 
-## Requirements
+## How to install
 
-- Linux with Python 3.12 (managed automatically by [uv](https://docs.astral.sh/uv/))
-- `ffmpeg` on your `PATH` (merging best video+audio, MP3/M4A conversion)
+Linux only. Developed and tested on Nobara (Fedora-based) in a Wayland session; X11 should work
+the same but hasn't been tried.
+
+**1. Install the prerequisites:** `git`, `ffmpeg` and [uv](https://docs.astral.sh/uv/).
+uv fetches the right Python (3.12) by itself.
 
 ```bash
-sudo dnf install ffmpeg      # Fedora / Nobara
-sudo apt install ffmpeg      # Debian / Ubuntu
+sudo dnf install git ffmpeg          # Fedora / Nobara
+sudo apt install git ffmpeg          # Debian / Ubuntu
+curl -LsSf https://astral.sh/uv/install.sh | sh   # uv (or: pipx install uv)
 ```
+
+`ffmpeg` is needed to merge best-quality video with its audio and to convert to MP3/M4A.
+Without it the app still starts, but warns you and those formats fail.
+
+**2. Get the code** (the repository is private, so you need access to it):
+
+```bash
+gh repo clone Meduty/video-downloader      # or: git clone https://github.com/Meduty/video-downloader.git
+cd video-downloader
+```
+
+Keep the folder where it is after step 4: the menu launcher points at it.
+
+**3. Install the dependencies and start it once:**
+
+```bash
+uv sync --no-dev
+uv run vd98
+```
+
+The first `uv sync` downloads Python 3.12, yt-dlp and Qt WebEngine (about 600 MB on disk, once).
+
+**4. Optional: add it to your application menu:**
+
+```bash
+./scripts/install-desktop.sh
+```
+
+This creates `~/.local/share/applications/vd98.desktop` and an icon in
+`~/.local/share/icons/hicolor/scalable/apps/vd98.svg`. "Video Downloader 98" then shows up in
+your app launcher.
+
+### Update
+
+```bash
+cd video-downloader
+git pull
+uv sync --no-dev
+```
+
+### Uninstall
+
+```bash
+rm ~/.local/share/applications/vd98.desktop ~/.local/share/icons/hicolor/scalable/apps/vd98.svg
+rm -r ~/.config/video-downloader-98      # saved settings (download folder, format, sound)
+rm -r video-downloader                   # the code itself
+```
+
+Downloaded videos stay in your download folder.
 
 ## Run
 
 ```bash
-uv run vd98
-```
-
-Add it to your application menu:
-
-```bash
-./scripts/install-desktop.sh
+uv run vd98          # from the repo folder, or use the menu entry from step 4
 ```
 
 ## Keyboard
@@ -78,6 +125,7 @@ Layout:
 | `src/vd98/settings.py` | JSON settings in `~/.config/video-downloader-98/` |
 | `src/vd98/api.py` | Bridge exposed to the web UI |
 | `src/vd98/app.py` | pywebview window (Qt backend) |
+| `src/vd98/chrome.py` | Window drag/resize through the window manager (works on Wayland) |
 | `src/vd98/web/` | HTML/CSS/JS UI, vendored 98.css |
 | `SPEC.md` | Goals, invariants, task log |
 

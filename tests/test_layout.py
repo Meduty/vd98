@@ -18,13 +18,25 @@ def test_frozen_paths_exist():
     assert settings.APP_DIR == "video-downloader-98"
 
 
+# Absolute URLs allowed in UI files: names, not loads.
+URL_ALLOWLIST = {
+    "http://www.w3.org/2000/svg",  # SVG XML namespace, never fetched
+    "https://...",  # URL input placeholder text
+}
+
+
 def test_ui_has_no_remote_assets():
-    """SPEC V.14: the UI loads nothing over the network."""
-    remote = re.compile(
-        r"""(src|href)\s*=\s*["']https?://"""
-        r"""|url\(\s*["']?https?://"""
-        r"""|@import\s+["']https?://"""
-        r"""|\b(fetch|import)\(\s*["']https?://"""
-    )
-    for path in [*WEB.glob("*.html"), *WEB.glob("*.css"), *WEB.glob("*.js")]:
-        assert not remote.search(path.read_text()), f"remote asset in {path.name}"
+    """SPEC V.14: the UI loads nothing over the network.
+
+    Any absolute http(s) URL in a non-vendor UI file fails, whatever loads it
+    (src=, url(), @import, fetch(), new Image().src = ...), unless allowlisted.
+    """
+    url = re.compile(r"""https?://[^\s"'`)<>]*""")
+    for path in [
+        *WEB.glob("*.html"),
+        *WEB.glob("*.css"),
+        *WEB.glob("*.js"),
+        *WEB.glob("*.svg"),
+    ]:
+        found = set(url.findall(path.read_text())) - URL_ALLOWLIST
+        assert not found, f"absolute URL(s) in {path.name}: {sorted(found)}"

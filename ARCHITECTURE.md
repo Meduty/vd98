@@ -35,12 +35,12 @@ Plain-data methods JS can call. Holds manager, settings, window ref (underscored
 
 | Concern | File / symbol |
 |---|---|
-| Queue ops for JS | `src/vd98/api.py:32` `add`, `cancel` :41, `remove` :44, `clear_finished` :47 |
-| State snapshot for polling | `get_state` :51, `init` :54 |
-| Settings + folder picker | `save_settings` :62, `choose_folder` :70 |
-| Open folder in file manager (only subprocess call) | `open_folder` :80 |
-| Custom title-bar buttons | `minimize` :94, `maximize` :98, `close` :102 |
-| Version info | `about` :107 |
+| Queue ops for JS | `src/vd98/api.py:35` `add`, `cancel` :44, `remove` :47, `clear_finished` :50 |
+| State snapshot for polling | `get_state` :54, `init` :57 |
+| Settings + folder picker | `save_settings` :65, `choose_folder` :73 |
+| Open folder in file manager (only subprocess call) | `open_folder` :83 |
+| Custom title-bar buttons | `minimize` :117, `maximize` :121, `close` :125 |
+| Version info | `about` :130 |
 
 ### 3. Shell: window
 
@@ -55,7 +55,7 @@ Plain-data methods JS can call. Holds manager, settings, window ref (underscored
 | Concern | File / symbol |
 |---|---|
 | Markup: title bar, menus, form, queue table, status bar, modal | `index.html` |
-| Startup, wiring, polling | `app.js` `start` :299, `wire` :236, `setInterval(refresh, 500)` :321 |
+| Startup, wiring, polling | `app.js` `start` :317, `wire` :236, `setInterval(refresh, 500)` :339 |
 | Render queue rows | `app.js` `render` :78, `cell`, `progressCell` |
 | Status-change side effects (sounds, dialogs) | `app.js` `announce` :109 |
 | Menus | `app.js` `wireMenus`; styles `app.css` `.menubar` |
@@ -93,12 +93,12 @@ Plain-data methods JS can call. Holds manager, settings, window ref (underscored
 1. Enter/click → `addUrl` (`src/vd98/web/app.js:142`) trims input, calls `api.add(url, preset)` (:150).
 2. pywebview runs `Api.add` (`src/vd98/api.py:32`) on a bridge thread.
 3. `DownloadManager.add` (`src/vd98/manager.py:79`): `normalize_url` (`src/vd98/urls.py:12`), `preset_opts` check, dir check, create `Job` under lock, `queue.put`.
-4. `Api.add` saves preset if changed (`save_settings` :62) and returns job dict → JS sets `selectedId`, plays start sound.
+4. `Api.add` saves preset if changed (`save_settings` :65) and returns job dict → JS sets `selectedId`, plays start sound.
 5. Worker `_worker` (`manager.py:131`) takes id, sets `downloading`, calls `_run` (:145).
 6. `_run` builds opts (preset + `paths`, `outtmpl`, `noplaylist=True` :150, hooks :155), calls `ydl.extract_info(url, download=True)` (:160).
 7. yt-dlp calls `_on_hook` (:183) per chunk → `_update` (:214) sets percent/speed/eta; ffmpeg step fires `_on_pp_hook` (:210) → `processing`.
 8. `_run` sets `done` + `filename` from `requested_downloads`; exceptions map to `cancelled` (with `_cleanup_partials` :227) or `error` (`clean_error` :60).
-9. Meanwhile JS `refresh` (`app.js:130`) polls `get_state` every 500 ms (:321) → `announce` (:109) plays done/error sound, opens error dialog → `render` (:78) rebuilds rows.
+9. Meanwhile JS `refresh` (`app.js:130`) polls `get_state` every 500 ms (:339) → `announce` (:109) plays done/error sound, opens error dialog → `render` (:78) rebuilds rows.
 
 ## Known violations
 
