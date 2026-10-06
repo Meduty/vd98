@@ -98,7 +98,7 @@
 
     if (selectedId != null && !jobs.some((j) => j.id === selectedId)) selectedId = null;
     const sel = jobs.find((j) => j.id === selectedId);
-    $("cancel").disabled = !sel || TERMINAL.has(sel.status);
+    $("cancel").disabled = !sel || TERMINAL.has(sel.status) || sel.status === "processing";
     $("remove").disabled = !sel || !TERMINAL.has(sel.status);
 
     const pending = jobs.filter((j) => !TERMINAL.has(j.status)).length;

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Video Downloader 98
+Comment=Download videos from the web, 1998 style
+Exec=@EXEC@
+Icon=@ICON@
+Terminal=false
+Categories=Network;AudioVideo;

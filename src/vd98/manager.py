@@ -154,8 +154,6 @@ class DownloadManager:
         try:
             with self._factory(opts) as ydl:
                 info = ydl.extract_info(job.url, download=True) or {}
-            if job._cancel.is_set():
-                raise DownloadCancelled()
             downloads = info.get("requested_downloads") or [{}]
             self._update(
                 job,
