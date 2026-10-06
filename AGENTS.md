@@ -47,7 +47,13 @@ Read by Claude Code (via `CLAUDE.md`) and Codex CLI.
 - Never `git add -A`, `git add .`, `git add -u`, `git commit -a`. Stage explicit paths:
   `git add -- <files>`, then check `git diff --cached --stat` shows only this task.
 - No secrets anywhere in the repo or agent context (SPEC V.12). The project has none; if one
-  appears, stop and ask.
+  appears, stop and ask. Enforcement is per effect (V.16–V.19): Claude Code's OS sandbox denies
+  shell reads of secret paths, deny rules cover the file tools, and `scripts/check_secrets.py`
+  checks staged content in the pre-commit hook and in CI. Once per clone:
+  `git config core.hooksPath .githooks`.
+- A block from the sandbox, a permission rule or the hook means stop and ask the user. Changing
+  `.claude/settings.json`, `.claude/hooks/**` or `.githooks/**` is the user's job; agents can't
+  edit them.
 - Never move or rename frozen paths (SPEC C.11): `src/vd98/web/vendor/`, the `vd98` script,
   `scripts/install-desktop.sh`, settings dir `video-downloader-98`.
 - No shell in app code; `subprocess` with arg lists only (SPEC V.2).

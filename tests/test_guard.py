@@ -1,7 +1,15 @@
-"""Tests for the PreToolUse guard hook (SPEC V.12)."""
+"""Tests for the PreToolUse hook after the effect-level redesign (SPEC V.12, V.19).
+
+The hook no longer parses shell commands for secret reads. The bypass cases the
+old text guard collected (globs, bash -lc, heredocs fed to interpreters, scripts
+written then run, shell functions named cat, ...) are now effect tests in
+scripts/sandbox_probe.sh, run inside the OS sandbox. Commits are checked by
+scripts/check_secrets.py (tests/test_check_secrets.py).
+"""
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -37,48 +45,13 @@ def bash(cmd):
         "git commit --all -m wip",
         "uv run pytest && git add -A",
         "true; git add -A",
-        "true & git add -A",
         "true | git add -A",
         "FOO=1 git add -A",
-        "env git add -A",
-        "bash -c 'git add -A'",
-        "cat .env",
-        "cat ./config/.env.local",
-        "less secret/keystore.txt",
-        "cp server.pem /tmp/",
-        "echo hi > .env",
-        "base64 id_rsa",
-        "git add secrets/token.txt",
-        "grep -r foo --include=*.key .",
-        # Codex review 2026-10-06: newline-separated commands
         "git status\ngit add -A",
         "true\ngit commit -am x",
-        "uv run pytest -q\n\ngit add .",
-        # Codex review 2026-10-06: .env prefix variants
-        "cat .envrc",
-        "cat config/.env_prod",
-        # Codex review 2026-10-06: inline interpreter code
-        "python3 -c 'print(open(\".env\").read())'",
-        'node -e \'require("fs").readFileSync("secret/x")\'',
-        # secret dirs still blocked in path form
-        "ls secrets/",
-        "ls ./secret",
-        # heredoc fed to a shell/interpreter is code (B.15)
-        "python3 - <<'EOF'\nprint(open('.env').read())\nEOF",
-        "bash <<'EOF'\ncat .env\nEOF",
-        "cat <<'EOF' | sh\ncat .env\nEOF",
-        "python3 -c \"$(cat <<'EOF'\nprint(open('.env').read())\nEOF\n)\"",
-        # data heredoc: unquoted delimiter expands, target and trailing lines still count
-        "cat > notes.md <<EOF\n$(cat .env)\nEOF",
-        "cat > notes.md <<'EOF'\nx\nEOF\ncat .env",
-        "cat <<'EOF' > .env\nKEY=1\nEOF",
-        # a data heredoc whose file the same command runs is code (B.17, upstream review)
-        "cat > /tmp/run.sh <<'EOF'\ncat .env\nEOF\nsh /tmp/run.sh",
-        "trap 'sh /tmp/r.sh' EXIT; cat > /tmp/r.sh <<'EOF'\ncat .env\nEOF",
-        "tee /tmp/r.py <<'EOF'\nprint(open('.env').read())\nEOF\npython3 /tmp/r.py",
     ],
 )
-def test_blocks(cmd):
+def test_bulk_staging_nudged(cmd):
     assert bash(cmd) is not None, cmd
 
 
@@ -87,53 +60,55 @@ def test_blocks(cmd):
     [
         "git add -- SPEC.md src/vd98/manager.py",
         "git add src/vd98/web/app.js",
-        # prose mentioning the word is not a path (8/12 past blocks were prose)
-        "git commit -m 'keep the secret out of git'",
-        "echo 'reaches a secret without naming it'",
-        "python3 - <<'EOF'\nprint('secrets are never read')\nEOF",
-        "cat > notes.md <<'EOF'\nreaches a secret without naming it\nEOF",
-        "git commit -F - <<'EOF'\nkeep secrets out\nEOF",
-        # data-sink heredoc naming secret paths is prose (B.15)
-        "cat > review/prompt.md <<'EOF'\nNever read secret/ or .env; ask the user.\nEOF",
-        "git commit -q -F - <<'EOF'\nfix: untrack secret/ and .env.dev\nEOF",
-        "tee -a notes.md <<'EOF'\nuntracked .env and secret/\nEOF",
         "git commit -m 'add -A flag docs'",
         "git commit -m 'all good' --amend",
-        "git commit --author='A <a@b>' -m x",
+        "git commit -F - <<'EOF'\nfix: untrack secret/ and .env\nEOF",
         "git status",
-        "git diff --cached --stat",
-        "git log --oneline -5",
-        "git rm --cached .env",
-        "git ls-files .env",
-        "git check-ignore -v .env",
         "uv run pytest -q",
-        "uv run ruff check .",
-        "cat .env.example",
-        "cat id_rsa.pub",
-        "echo 'keys are in the vault'",
-        "grep -n monkey src/",
-        "git commit -m 'line one\nline two'",
-        "git status\ngit diff --stat",
-        "python3 -c 'print(1)'",
     ],
 )
-def test_allows(cmd):
+def test_explicit_staging_allowed(cmd):
     assert bash(cmd) is None, cmd
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "cat > review/prompt.md <<'EOF'\nNever read secret/ or .env; ask the user.\nEOF",
+        "echo 'keep the secret out of git'",
+        "python3 - <<'EOF'\nprint('secrets are never read')\nEOF",
+        "git commit -m 'untrack .env and secret/'",
+    ],
+)
+def test_prose_naming_secret_paths_is_never_blocked(cmd):
+    """The text guard's main cost (8 of 12 real blocks) is gone with the parser."""
+    assert bash(cmd) is None, cmd
+
+
+def test_shell_secret_reads_are_the_sandboxes_job():
+    """By design the hook does not judge shell reads; the OS sandbox does.
+
+    If this starts failing, someone re-added command parsing to the hook. Prefer
+    adding a case to scripts/sandbox_probe.sh instead (SPEC V.12).
+    """
+    assert bash("cat .env") is None
 
 
 @pytest.mark.parametrize(
     "tool,inp",
     [
         ("Read", {"file_path": "/repo/.env"}),
+        ("Read", {"file_path": "/repo/.envrc"}),
         ("Read", {"file_path": "/repo/secret/app.jks"}),
         ("Edit", {"file_path": "/repo/certs/server.pem"}),
         ("Write", {"file_path": "/repo/.env.production"}),
         ("Grep", {"pattern": "x", "path": "/repo/secrets"}),
         ("Grep", {"pattern": "x", "glob": "*.pem"}),
         ("Glob", {"pattern": "**/*.keystore"}),
+        ("NotebookEdit", {"notebook_path": "/repo/secret/n.ipynb"}),
     ],
 )
-def test_blocks_file_tools(tool, inp):
+def test_file_tools_on_secret_paths_blocked(tool, inp):
     assert guard.check({"tool_name": tool, "tool_input": inp}) is not None
 
 
@@ -142,18 +117,20 @@ def test_blocks_file_tools(tool, inp):
     [
         ("Read", {"file_path": "/repo/src/vd98/settings.py"}),
         ("Read", {"file_path": "/repo/.env.example"}),
-        ("Grep", {"pattern": "password", "path": "/repo/src"}),
+        ("Read", {"file_path": "/repo/id_rsa.pub"}),
+        ("Read", {"file_path": "/repo/docs/secret-handling.md"}),
+        ("Grep", {"pattern": "secret", "path": "/repo/src"}),
         ("Glob", {"pattern": "**/*.py"}),
     ],
 )
-def test_allows_file_tools(tool, inp):
+def test_file_tools_on_ordinary_paths_allowed(tool, inp):
     assert guard.check({"tool_name": tool, "tool_input": inp}) is None
 
 
 def run_hook(payload):
     return subprocess.run(
         [sys.executable, str(HOOK)],
-        input=json.dumps(payload),
+        input=payload if isinstance(payload, str) else json.dumps(payload),
         capture_output=True,
         text=True,
         timeout=10,
@@ -161,10 +138,11 @@ def run_hook(payload):
     )
 
 
-def test_hook_process_exit_2_with_reason_on_block():
+def test_hook_process_exit_2_with_hint_on_block():
     res = run_hook({"tool_name": "Bash", "tool_input": {"command": "git add -A"}})
     assert res.returncode == 2
-    assert "git add -A" in res.stderr or "stage" in res.stderr
+    assert "explicit paths" in res.stderr
+    assert "stop and ask" in res.stderr
 
 
 def test_hook_process_exit_0_when_allowed():
@@ -173,11 +151,186 @@ def test_hook_process_exit_0_when_allowed():
 
 
 def test_hook_process_survives_garbage_input():
-    res = subprocess.run(
-        [sys.executable, str(HOOK)],
-        input="not json",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert res.returncode == 0
+    assert run_hook("not json").returncode == 0
+
+
+# PR #2 review round 1 (2026-10-06)
+@pytest.mark.parametrize(
+    "tool,inp",
+    [
+        ("Grep", {"pattern": "x", "path": "/repo", "glob": "*.p?x"}),
+        ("Grep", {"pattern": "x", "path": "/repo", "glob": "*.[pk]e[my]"}),
+        ("Glob", {"pattern": "**/*.kd?x"}),
+        ("Glob", {"pattern": "**/.env*"}),
+        ("Glob", {"pattern": "**/secr?t/*"}),
+    ],
+)
+def test_file_tool_globs_that_can_match_secrets_blocked(tool, inp):
+    """Finding 2: a masked extension glob slipped past the literal path check."""
+    assert guard.check({"tool_name": tool, "tool_input": inp}) is not None
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "env git add -A",
+        "sudo git add -A",
+        "nice -n 5 git commit -am x",
+        "git -c core.hooksPath=/tmp/empty commit -m x",
+        "git -c core.hooksPath /tmp/empty commit -m x",
+        "git commit --no-verify -m x",
+        "git commit -n -m x",
+    ],
+)
+def test_wrappers_and_hook_skips_nudged(cmd):
+    """Findings 4 and 6: wrappers hid bulk staging; hooksPath / --no-verify skip pre-commit."""
+    assert bash(cmd) is not None, cmd
+
+
+# PR #3 review round 1, finding 4 (2026-10-06)
+@pytest.mark.parametrize(
+    "tool,inp",
+    [
+        ("Grep", {"pattern": "x", "path": "secret"}),
+        ("Grep", {"pattern": "x", "path": "secrets"}),
+        ("Glob", {"pattern": "*", "path": "secret"}),
+        ("Read", {"file_path": "secrets"}),
+    ],
+)
+def test_bare_relative_secret_dir_blocked(tool, inp):
+    """A file-tool path is a path: bare `secret` (no slash) names the folder."""
+    assert guard.check({"tool_name": tool, "tool_input": inp}) is not None
+
+
+@pytest.mark.parametrize(
+    "tool,inp",
+    [
+        ("Grep", {"pattern": "secret", "path": "src"}),
+        ("Read", {"file_path": "docs/secret-handling.md"}),
+        ("Glob", {"pattern": "secretary/*.py"}),
+    ],
+)
+def test_words_that_only_contain_secret_allowed(tool, inp):
+    assert guard.check({"tool_name": tool, "tool_input": inp}) is None
+
+
+# PR #3 review round 2, finding 5 (SPEC B.35)
+def test_symlink_to_secret_file_blocked(tmp_path):
+    """A harmless-looking name that links to a secret file is the secret file."""
+    (tmp_path / ".env").write_text("fake")
+    (tmp_path / "notes.txt").symlink_to(tmp_path / ".env")
+    payload = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": "notes.txt"},
+        "cwd": str(tmp_path),
+    }
+    assert guard.check(payload) is not None
+
+
+def test_symlink_to_secret_dir_blocked(tmp_path):
+    (tmp_path / "secrets").mkdir()
+    (tmp_path / "docs").symlink_to(tmp_path / "secrets")
+    payload = {
+        "tool_name": "Grep",
+        "tool_input": {"pattern": "x", "path": "docs"},
+        "cwd": str(tmp_path),
+    }
+    assert guard.check(payload) is not None
+
+
+def test_ordinary_symlink_allowed(tmp_path):
+    (tmp_path / "real.txt").write_text("hi")
+    (tmp_path / "link.txt").symlink_to(tmp_path / "real.txt")
+    payload = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": "link.txt"},
+        "cwd": str(tmp_path),
+    }
+    assert guard.check(payload) is None
+
+
+# PR #3 review round 2, finding 6 (SPEC B.36); PR #2 review round 2, finding 4 (B.37)
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        (
+            "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/tmp/x"
+            " git commit -m x"
+        ),
+        "GIT_CONFIG_PARAMETERS=\"'core.hooksPath'='/tmp/x'\" git commit -m x",
+        # PR #2 review round 3, finding 6 (B.41): assignments after a wrapper
+        (
+            "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath"
+            " GIT_CONFIG_VALUE_0=/tmp/x git commit -m x"
+        ),
+        "sudo -E GIT_CONFIG_PARAMETERS=\"'core.hooksPath'='/tmp/x'\" git commit -m x",
+        "git config core.hooksPath /dev/null",
+        "git config --local core.hooksPath /tmp/x",
+        "git config --unset core.hooksPath",
+    ],
+)
+def test_hookspath_overrides_nudged(cmd):
+    assert bash(cmd) is not None, cmd
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "GIT_AUTHOR_NAME=x git commit -m 'msg'",
+        "git config core.hooksPath .githooks",
+        "git config --get core.hooksPath",
+        "git config core.hooksPath",
+        "git config user.name x",
+    ],
+)
+def test_ordinary_config_and_env_allowed(cmd):
+    assert bash(cmd) is None, cmd
+
+
+# SPEC D.12 (decided: accept for the shell, block for file tools). raising=False
+# only so the pre-change guard fails on behaviour instead of a fixture error.
+@pytest.fixture
+def codex_home(tmp_path, monkeypatch):
+    home = tmp_path / "codex"
+    home.mkdir()
+    (home / "auth.json").write_text("{}")
+    monkeypatch.setattr(guard, "PRIVATE_DIRS", [os.path.realpath(home)], raising=False)
+    return home
+
+
+def run(tool, inp, cwd):
+    return guard.check({"tool_name": tool, "tool_input": inp, "cwd": str(cwd)})
+
+
+@pytest.mark.parametrize(
+    "tool,key,rel",
+    [
+        ("Read", "file_path", "codex/auth.json"),
+        ("Read", "file_path", "codex/config.toml"),
+        ("Grep", "path", "codex"),
+        ("Glob", "pattern", "codex/*"),
+        ("Grep", "path", "."),  # a folder above: Grep would recurse into it
+    ],
+)
+def test_codex_login_unreachable_by_file_tools(codex_home, tool, key, rel):
+    inp = {key: rel} if tool != "Grep" else {"pattern": "x", key: rel}
+    assert run(tool, inp, codex_home.parent) is not None
+
+
+def test_codex_login_via_symlink_blocked(codex_home, tmp_path):
+    (tmp_path / "notes.json").symlink_to(codex_home / "auth.json")
+    assert run("Read", {"file_path": "notes.json"}, tmp_path) is not None
+
+
+@pytest.mark.parametrize(
+    "tool,inp",
+    [
+        ("Read", {"file_path": "project/README.md"}),
+        ("Grep", {"pattern": "x", "path": "project"}),
+        ("Glob", {"pattern": "*"}),  # lists names only, never contents
+    ],
+)
+def test_ordinary_paths_next_to_codex_home_allowed(codex_home, tool, inp):
+    (codex_home.parent / "project").mkdir()
+    (codex_home.parent / "project" / "README.md").write_text("hi")
+    assert run(tool, inp, codex_home.parent) is None

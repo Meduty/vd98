@@ -111,9 +111,14 @@ uv lock --upgrade-package yt-dlp && uv sync
 
 ```bash
 uv sync
+git config core.hooksPath .githooks   # once per clone: refuse commits that add secrets
 uv run pytest
 uv run ruff check .
 ```
+
+Working with an AI agent (Claude Code) in this repo uses its OS sandbox (see `CLAUDE.md`).
+On Linux that needs `bubblewrap` and `socat` (`sudo dnf install bubblewrap socat`). The settings
+refuse to start without them rather than running unsandboxed.
 
 Layout:
 

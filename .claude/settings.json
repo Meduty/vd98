@@ -12,16 +12,21 @@
       "Bash(git log *)"
     ],
     "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/.envrc)",
       "Read(**/secret/**)",
       "Read(**/secrets/**)",
       "Read(**/*.pem)",
       "Read(**/*.key)",
+      "Read(**/*.p12)",
       "Read(**/*.jks)",
       "Read(**/*.keystore)",
       "Edit(**/secret/**)",
       "Edit(**/secrets/**)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/hooks/**)",
+      "Edit(/.githooks/**)",
       "Bash(git add -A)",
       "Bash(git add -A *)",
       "Bash(git add --all)",
@@ -32,9 +37,74 @@
       "Bash(git commit -a *)",
       "Bash(git commit -am *)",
       "Bash(git commit --all *)",
+      "Bash(git commit --no-verify *)",
       "Bash(git push --force *)",
-      "Bash(git push -f *)"
+      "Bash(git push -f *)",
+      "Read(**/*.pfx)",
+      "Read(**/*.kdbx)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)",
+      "Edit(**/*.pfx)",
+      "Edit(**/*.kdbx)",
+      "Bash(git commit --no-verify)",
+      "Bash(git commit -n *)",
+      "Bash(git -c core.hooksPath*)",
+      "Bash(git -c core.hooksPath *)"
     ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "allowWrite": [
+        "~/.cache/uv"
+      ],
+      "denyRead": [
+        "./.env",
+        "./.env.*",
+        "./.envrc",
+        "./**/.env",
+        "./**/.env.*",
+        "./secret",
+        "./secrets",
+        "./**/*.pem",
+        "./**/*.key",
+        "./**/*.p12",
+        "./**/*.pfx",
+        "./**/*.jks",
+        "./**/*.keystore",
+        "./**/*.kdbx",
+        "~/.ssh",
+        "~/.aws",
+        "~/.bw_session",
+        "./**/.envrc",
+        "./**/secret",
+        "./**/secrets",
+        "./id_rsa",
+        "./**/id_rsa",
+        "./id_ed25519",
+        "./**/id_ed25519",
+        "./id_ecdsa",
+        "./**/id_ecdsa",
+        "./id_dsa",
+        "./**/id_dsa"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "*.github.com",
+        "*.githubusercontent.com",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "astral.sh",
+        "*.youtube.com",
+        "*.googlevideo.com",
+        "*.ytimg.com",
+        "example.com"
+      ]
+    }
   },
   "hooks": {
     "PreToolUse": [
