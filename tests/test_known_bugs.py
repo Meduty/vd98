@@ -42,10 +42,8 @@ def test_b4_preset_opts_unhashable_is_value_error():
         preset_opts([])
 
 
-@pytest.mark.xfail(
-    strict=True, reason="SPEC B.4: Api.cancel raises on non-int id (V.11)"
-)
 def test_b4_api_cancel_bad_id_returns_false(tmp_path):
+    """SPEC B.4 (API part) fixed by Api._job_id; kept as a regression test."""
     api = Api(DownloadManager(ydl_factory=NullYDL), settings_path=tmp_path / "s.json")
     assert api.cancel("not-a-number") is False
 

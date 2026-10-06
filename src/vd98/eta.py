@@ -9,14 +9,18 @@ download, so the estimate gets steadier over time but still follows a real slowd
 
 class HalfWindowEta:
     MAX_SAMPLES = 512  # thinned beyond 2x this; the reference only needs coarse samples
+    STALL_SECONDS = 5.0  # no new bytes for this long -> no ETA (a 1 s hiccup keeps it)
 
     def __init__(self) -> None:
         # (time, bytes), bytes non-decreasing within one file
         self._samples: list[tuple[float, int]] = []
+        self._last_growth: float | None = None  # time bytes last increased
 
     def add(self, t: float, downloaded: int) -> None:
         if self._samples and downloaded < self._samples[-1][1]:
             self._samples = []  # a new file started (e.g. audio after video)
+        if not self._samples or downloaded > self._samples[-1][1]:
+            self._last_growth = t
         self._samples.append((t, downloaded))
         self._prune()
 
@@ -27,6 +31,11 @@ class HalfWindowEta:
         t_now, done = self._samples[-1]
         if done >= total:
             return 0.0
+        if (
+            self._last_growth is not None
+            and t_now - self._last_growth >= self.STALL_SECONDS
+        ):
+            return None  # stalled after progress: unknown, not a growing guess (V.22)
         t_ref, done_ref = self._reference(done / 2)
         elapsed, gained = t_now - t_ref, done - done_ref
         if elapsed <= 0 or gained <= 0:

@@ -44,17 +44,29 @@ class Api:
             self.save_settings({"preset": preset})
         return job
 
+    @staticmethod
+    def _job_id(value) -> int | None:
+        """A job id from JS, or None. Only real ints and digit strings: 1.9 must not
+        become job 1, and True must not become job 1 either (V.11, B.4)."""
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+        return None
+
     def cancel(self, job_id):
-        return self._manager.cancel(int(job_id))
+        jid = self._job_id(job_id)
+        return False if jid is None else self._manager.cancel(jid)
 
     def remove(self, job_id):
-        return self._manager.remove(int(job_id))
+        jid = self._job_id(job_id)
+        return False if jid is None else self._manager.remove(jid)
 
     def resume(self, job_id):
-        try:
-            return self._manager.resume(int(job_id))
-        except (TypeError, ValueError):
-            return False  # V.11: bad input -> falsy, never an exception
+        jid = self._job_id(job_id)
+        return False if jid is None else self._manager.resume(jid)
 
     def resume_all(self):
         return self._manager.resume_all()
@@ -134,6 +146,16 @@ class Api:
     def maximize(self, on):
         if self._window:
             self._window.maximize() if on else self._window.restore()
+
+    def _on_window_closing(self):
+        """pywebview `closing` handler for a WM close (not our title-bar button).
+
+        Suspends like close() (V.21) but always returns None: returning False cancels
+        the close, and suspend() returns False when a job is still converting (PR #3
+        review). The user asked to close; the worker is a daemon and stops with us.
+        Deliberately has no return statement.
+        """
+        self._manager.suspend(timeout=3)
 
     def close(self):
         # suspend, don't cancel: partial files stay and jobs resume next start (V.21)

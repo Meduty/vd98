@@ -71,6 +71,20 @@ def test_finished_or_stalled():
     assert stalled.eta(1000) is None  # no progress -> unknown, not infinite
 
 
+def test_stall_after_progress_clears_eta():
+    """PR #3 review finding 3: progress, then no growth for STALL_SECONDS -> no ETA."""
+    est = HalfWindowEta()
+    feed(est, [(0, 0), (1, 100), (1 + HalfWindowEta.STALL_SECONDS, 100)])
+    assert est.eta(1000) is None
+
+
+def test_brief_pause_keeps_eta():
+    """A one-second hiccup is not a stall: the estimate stays."""
+    est = HalfWindowEta()
+    feed(est, [(0, 0), (1, 100), (2, 100)])
+    assert est.eta(1000) is not None
+
+
 def test_memory_stays_bounded():
     est = HalfWindowEta()
     feed(est, [(t / 10, t) for t in range(100_000)])

@@ -350,14 +350,18 @@ class DownloadManager:
         """Save unfinished jobs (V.20). Never raises; a full disk only loses resume info."""
         if self._store is None:
             return
-        with self._lock:
-            entries = [
-                j.persisted() for j in self._jobs.values() if j.status in UNFINISHED
-            ]
+        # Snapshot INSIDE the save lock: otherwise an older snapshot can wait for the lock
+        # and overwrite a newer save (PR #3 review). Lock order: _persist_lock -> _lock.
         with (
             self._persist_lock
         ):  # one writer at a time: the store uses a fixed tmp name
-            self._store.save(entries)
+            self._store.save(self._unfinished())
+
+    def _unfinished(self) -> list[dict]:
+        with self._lock:
+            return [
+                j.persisted() for j in self._jobs.values() if j.status in UNFINISHED
+            ]
 
     def _cleanup_partials(self, job: Job) -> None:
         dest = Path(job.dest_dir).resolve()

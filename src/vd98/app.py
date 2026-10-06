@@ -23,6 +23,7 @@ def run() -> None:
         background_color="#008080",
     )
     api._attach(window)
-    # window closed by the WM (not our title-bar button): same suspend, partials kept (V.21)
-    window.events.closing += lambda: api._manager.suspend(timeout=3)
+    # window closed by the WM (not our title-bar button): same suspend, partials kept (V.21);
+    # the handler returns None so a slow suspend never cancels the close
+    window.events.closing += api._on_window_closing
     webview.start(gui="qt", private_mode=True)
