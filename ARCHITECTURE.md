@@ -21,9 +21,9 @@ Owns jobs, one worker thread, yt-dlp calls, cancel, partial cleanup. No GUI impo
 |---|---|
 | Job record + public dict | `src/vd98/manager.py:26` `Job`, `Job.public` |
 | Queue, worker, state machine | `src/vd98/manager.py:88` `DownloadManager`, `_worker` :233, `_run` :257 |
-| Progress → percent/speed/eta | `src/vd98/manager.py:298` `_on_hook`; post-processing `_on_pp_hook` :330 |
+| Progress → percent/speed/eta | `src/vd98/manager.py:298` `_on_hook`; post-processing `_on_pp_hook` :342 |
 | Thread-safe state writes, terminal guard | `src/vd98/manager.py:334` `_update` |
-| Cancel + `.part` cleanup | `cancel` :91, `_cleanup_partials` :227 |
+| Cancel + `.part` cleanup | `cancel` :124, `_cleanup_partials` :378 |
 | yt-dlp error → short message | `src/vd98/manager.py:82` `clean_error` |
 | URL validation | `src/vd98/urls.py:12` `normalize_url` |
 | Format presets → yt-dlp opts | `src/vd98/formats.py` `PRESETS`, `preset_opts`, `preset_list` |
@@ -38,11 +38,11 @@ Plain-data methods JS can call. Holds manager, settings, window ref (underscored
 | Concern | File / symbol |
 |---|---|
 | Queue ops for JS | `src/vd98/api.py:38` `add`, `cancel` :59, `remove` :63, `clear_finished` :74 |
-| State snapshot for polling | `get_state` :54, `init` :57 |
-| Settings + folder picker | `save_settings` :65, `choose_folder` :73 |
-| Open folder in file manager (only subprocess call) | `open_folder` :83 |
-| Custom title-bar buttons | `minimize` :117, `maximize` :121, `close` :125 |
-| Version info | `about` :130 |
+| State snapshot for polling | `get_state` :78, `init` :81 |
+| Settings + folder picker | `save_settings` :90, `choose_folder` :98 |
+| Open folder in file manager (only subprocess call) | `open_folder` :108 |
+| Custom title-bar buttons | `minimize` :142, `maximize` :146, `close` :160 |
+| Version info | `about` :166 |
 
 ### 3. Shell: window
 

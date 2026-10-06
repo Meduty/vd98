@@ -35,7 +35,7 @@ def _clean(raw) -> dict | None:
         return None
     try:
         url = normalize_url(raw.get("url"))
-    except InvalidURL:
+    except (InvalidURL, ValueError, TypeError):  # one bad entry never breaks startup
         return None
     preset = raw.get("preset")
     if not isinstance(preset, str) or preset not in PRESETS:
@@ -80,10 +80,15 @@ class QueueStore:
 
     def save(self, entries: list[dict]) -> bool:
         """Write atomically; False (never an exception) if the disk says no."""
+        # Private: saved URLs can carry access tokens (PR #3 review) -> dir 0700, file 0600.
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(self.path.parent, 0o700)
             tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(entries, indent=2))
+            os.chmod(tmp, 0o600)  # an older tmp may predate this rule
             tmp.replace(self.path)
         except OSError:
             return False

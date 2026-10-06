@@ -24,6 +24,12 @@ class HalfWindowEta:
         self._samples.append((t, downloaded))
         self._prune()
 
+    def stalled(self) -> bool:
+        """No new bytes for STALL_SECONDS: callers must show no ETA, not a fallback."""
+        if self._last_growth is None or not self._samples:
+            return False
+        return self._samples[-1][0] - self._last_growth >= self.STALL_SECONDS
+
     def eta(self, total: int | None) -> float | None:
         """Seconds left, or None when it can't be estimated yet."""
         if not total or len(self._samples) < 2:
@@ -31,10 +37,7 @@ class HalfWindowEta:
         t_now, done = self._samples[-1]
         if done >= total:
             return 0.0
-        if (
-            self._last_growth is not None
-            and t_now - self._last_growth >= self.STALL_SECONDS
-        ):
+        if self.stalled():
             return None  # stalled after progress: unknown, not a growing guess (V.22)
         t_ref, done_ref = self._reference(done / 2)
         elapsed, gained = t_now - t_ref, done - done_ref

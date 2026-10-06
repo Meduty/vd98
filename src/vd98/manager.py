@@ -302,6 +302,9 @@ class DownloadManager:
         title = (d.get("info_dict") or {}).get("title")
         if title and not job.title:
             changes["title"] = title
+        new_partial = (
+            bool(d.get("tmpfilename")) and d["tmpfilename"] not in job._tmpfiles
+        )
         if d.get("tmpfilename"):
             job._tmpfiles.add(d["tmpfilename"])
         if d.get("filename"):
@@ -322,10 +325,19 @@ class DownloadManager:
                 job._eta.add(self._clock(), int(done))
             smoothed = job._eta.eta(int(total) if total else None)
             changes["speed"] = d.get("speed")
-            changes["eta"] = round(smoothed) if smoothed is not None else d.get("eta")
+            if smoothed is not None:
+                changes["eta"] = round(smoothed)
+            elif job._eta.stalled():
+                changes["eta"] = None  # V.22: no ETA in a stall, not yt-dlp's stale one
+            else:
+                changes["eta"] = d.get("eta")  # not enough samples yet
         elif d.get("status") == "finished":
             changes.update(percent=100.0, speed=None, eta=None)
         self._update(job, **changes)
+        if new_partial:
+            # save the .part path now, not only on the next status change, so a
+            # killed (not closed) app still lets Cancel clean it up (PR #3 review)
+            self._persist()
 
     def _on_pp_hook(self, job: Job, d: dict) -> None:
         if d.get("status") == "started":
