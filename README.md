@@ -44,7 +44,7 @@ Without it the app still starts, but warns you and those formats fail.
 **2. Get the code:**
 
 ```bash
-gh repo clone Meduty/vd98      # or: git clone https://github.com/Meduty/vd98.git
+gh repo clone medukn/vd98      # or: git clone https://github.com/medukn/vd98.git
 cd vd98
 ```
 

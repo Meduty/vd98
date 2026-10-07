@@ -3,7 +3,7 @@ name = "vd98"
 version = "0.1.0"
 description = "Retro Windows 98-style desktop video downloader powered by yt-dlp"
 authors = [
-    { name = "Meduty", email = "95845521+Meduty@users.noreply.github.com" }
+    { name = "medukn", email = "95845521+medukn@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
