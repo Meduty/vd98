@@ -1,6 +1,6 @@
 # SPEC — Video Downloader 98
 
-> **Status: LIVING** — contract for `src/vd98/`. Style: [FORMAT.md](FORMAT.md). **Reconciled:** 2026-10-06.
+> **Status: LIVING** — contract for `src/vd98/`. Style: [FORMAT.md](FORMAT.md). **Reconciled:** 2026-10-07.
 
 ## §G Goal
 
@@ -12,7 +12,7 @@
 
 - C.1: Python 3.12 (`.python-version`), uv + `uv_build` backend (`pyproject.toml`). Locked: yt-dlp 2026.8.19, pywebview 6.2.1, PyQt6 / PyQt6-WebEngine 6.11, pytest 9.1.1, ruff 0.16.10 (`uv.lock`).
 - C.2: Engine = yt-dlp as Python lib. `ffmpeg` on PATH needed for merge + audio extract; absence → warning dialog only (`src/vd98/api.py` `Api.init`, `src/vd98/web/app.js` `start`).
-- C.3: GUI = pywebview Qt backend, frameless window, `private_mode=True` (`src/vd98/app.py` `run`). UI = HTML/CSS/JS in `src/vd98/web/`, offline; 98.css v0.1.21 + MS Sans Serif webfonts vendored in `src/vd98/web/vendor/` with MIT notice `98.css.LICENSE`.
+- C.3: GUI = pywebview Qt backend, frameless window, `private_mode=True` (`src/vd98/app.py` `run`). UI = HTML/CSS/JS in `src/vd98/web/`, offline; 98.css v0.1.21 (MIT, notice `98.css.LICENSE`) + MS Sans Serif webfonts (CC BY-SA 3.0 by "lou" via FontStruct, notice `ms_sans_serif.fonts.LICENSE` = upstream `fonts/src/*/license.txt` + `readme.txt`) vendored in `src/vd98/web/vendor/`.
 - C.4: Entry points: `vd98 = "vd98:main"` (`pyproject.toml`), `python -m vd98` (`src/vd98/__main__.py`).
 - C.5: State: job list in memory; unfinished jobs (queued/downloading/processing/paused) also persisted to `$XDG_STATE_HOME/video-downloader-98/queue.json`, fallback `~/.local/state/…` (`src/vd98/queue_store.py` `state_path`), so they survive restarts (V.20). Settings: `$XDG_CONFIG_HOME/video-downloader-98/settings.json`, fallback `~/.config/…` (`src/vd98/settings.py` `config_path`). Keys: `download_dir`, `preset`, `sound`.
 - C.6: Secrets: none. No tokens, keys, signing. Guard anyway (V.12).

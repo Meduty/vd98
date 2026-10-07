@@ -11,6 +11,7 @@ def test_frozen_paths_exist():
     """SPEC V.13 / C.11: frozen paths stay where installers, docs and licenses expect them."""
     assert (WEB / "vendor" / "98.css").is_file()
     assert (WEB / "vendor" / "98.css.LICENSE").is_file()
+    assert (WEB / "vendor" / "ms_sans_serif.fonts.LICENSE").is_file()
     assert (ROOT / "scripts" / "install-desktop.sh").is_file()
     assert 'vd98 = "vd98:main"' in (ROOT / "pyproject.toml").read_text()
     from vd98 import settings
