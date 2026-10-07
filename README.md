@@ -41,7 +41,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh   # uv (or: pipx install uv)
 `ffmpeg` is needed to merge best-quality video with its audio and to convert to MP3/M4A.
 Without it the app still starts, but warns you and those formats fail.
 
-**2. Get the code** (the repository is private, so you need access to it):
+**2. Get the code:**
 
 ```bash
 gh repo clone Meduty/vd98      # or: git clone https://github.com/Meduty/vd98.git
@@ -148,6 +148,8 @@ terms of service and copyright law in your country.
 
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense)
 - [98.css](https://github.com/jdan/98.css) by Jordan Scales (MIT, see `src/vd98/web/vendor/98.css.LICENSE`)
+- MS Sans Serif pixel fonts (bundled with 98.css) by “lou” via [FontStruct](https://fontstruct.com/fontstructions/show/1384746)
+  ([CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), see `src/vd98/web/vendor/ms_sans_serif.fonts.LICENSE`)
 - [pywebview](https://pywebview.flowrl.com/) (BSD-3-Clause)
 
 Licensed under the MIT License.
