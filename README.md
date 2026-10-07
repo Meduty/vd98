@@ -44,8 +44,8 @@ Without it the app still starts, but warns you and those formats fail.
 **2. Get the code** (the repository is private, so you need access to it):
 
 ```bash
-gh repo clone Meduty/video-downloader      # or: git clone https://github.com/Meduty/video-downloader.git
-cd video-downloader
+gh repo clone Meduty/vd98      # or: git clone https://github.com/Meduty/vd98.git
+cd vd98
 ```
 
 Keep the folder where it is after step 4: the menu launcher points at it.
@@ -72,7 +72,7 @@ your app launcher.
 ### Update
 
 ```bash
-cd video-downloader
+cd vd98
 git pull
 uv sync --no-dev
 ```
@@ -82,7 +82,7 @@ uv sync --no-dev
 ```bash
 rm ~/.local/share/applications/vd98.desktop ~/.local/share/icons/hicolor/scalable/apps/vd98.svg
 rm -r ~/.config/video-downloader-98      # saved settings (download folder, format, sound)
-rm -r video-downloader                   # the code itself
+rm -r vd98                               # the code itself
 ```
 
 Downloaded videos stay in your download folder.
